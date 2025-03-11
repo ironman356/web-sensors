@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Raw GPS Output</title>
+        <style>
+            body {
+                font-size: 2em;
+            }
+            label {
+                display: block;                
+            }
+            button {
+                font-size: 1em;
+            }
+            #errors {
+                color: red;
+            }
+        </style>
+    </head>
+    <body>
+        <!-- Requires HTTPS, accuracy levels out to 2, altacc 3 on Iphone 15 pro when outside -->
+        <!-- Additional details https://developer.mozilla.org/en-US/docs/Web/API/GeolocationCoordinates -->
+        <h2>navigator.geolocation.watchPosition</h1>
+        <label>Speed: <span id="speed">--</span> m/s</label><br />
+        <label>Heading: <span id="heading">--</span> deg due True North</label><br />
+        <label>Accuracy: <span id="accuracy">--</span> meters 95% confidence</label><br />
+        <label>Latitude: <span id="latitude">--</span></label><br />
+        <label>Longitude: <span id="longitude">--</span></label><br />
+        <label>Altitude: <span id="altitude">--</span> meters</label><br />
+        <label>Altitude Accuracy: <span id="altitude-accuracy">--</span> meters 95% confidence</label><br />
+        <label>Timestamp: <span id="time-stamp">--</span></label>
+        <br />
+        <button id="pairGPS" onclick="startGPS()">Pair</button><br />
+        <span id="errors"></span><br />
+    </body>
+    <script>
+        let geoWatchID = null;
+        
+        function updateReadout(data, timestamp) {
+            document.getElementById("speed").textContent = data.speed ?? "null";
+            document.getElementById("heading").textContent = data.heading ?? "null";
+            document.getElementById("accuracy").textContent = data.accuracy ?? "null";
+            document.getElementById("latitude").textContent = data.latitude ?? "null";
+            document.getElementById("longitude").textContent = data.longitude ?? "null";
+            document.getElementById("altitude").textContent = data.altitude ?? "null";
+            document.getElementById("altitude-accuracy").textContent = data.altitudeAccuracy ?? "null";
+            
+            let date = new Date(timestamp);
+            let formattedTime = date.toLocaleTimeString(date);
+            document.getElementById("time-stamp").textContent = formattedTime ?? "null";
+        }
+        
+        function startGPS() {
+            document.getElementById('errors').textContent = "";
+            if (geoWatchID !== null) {
+                document.getElementById('errors').textContent = "WatchID already created";
+                return;
+            }
+            if ('geolocation' in navigator) {
+                // getCurrentPosition is 1 time, watchPosition is continually called
+                geoWatchID = navigator.geolocation.watchPosition(
+                    position => {
+                        updateReadout(position.coords, position.timestamp);
+                    },
+                    error => {
+                        document.getElementById('errors').textContent = "Geolocation error: " + error.message;
+                        geoWatchID = null;
+                    },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            } else {
+                document.getElementById('errors').textContent = "Geolocation is not supported";
+            }
+        }
+    </script>
+</html>
