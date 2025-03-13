@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Speedometer</title>
+        <style>
+            body {
+                font-size: 5em;
+                background-color: black;
+                color: lightgray;
+            }
+            .topReadout {
+                padding-top: 5vh;
+                display: flex;
+                align-items: flex-end;
+            }
+
+            h1, h2, h3 { margin: 0; }
+            h1 { text-align: right; width: 50vw; }
+            h3 { margin-left: 2vw; }
+            h2 { margin-left: 5vw; }
+            button, select { font-size: 1em; }
+
+            nav {
+                position: fixed;
+                transition: transform 0.5s ease-in-out;
+            }
+            .hidden {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+        </style>
+    </head>
+    <body>
+        <nav id="navbar"><a href="../web_sensors.html"><button>Directory</button></a></nav>
+        
+        <div class="topReadout">
+            <h1 id="speed">__</h1>
+            <h3 id="speedUnits"></h3>
+            <h2 id="heading">(--)</h2>
+        </div>
+        
+        <br />
+        <br />
+        <br />
+        <label><h3 id="time-stamp">Timestamp</h3></label>
+        <br />
+        <label><h3 id="accuracy">Acc</h3></label>
+        <br />
+        
+        <select id="speedUnitSelection">
+            <option value="mph">mph</option>
+            <option value="kph">kph</option>
+            <option value="m/s">m/s</option>
+        </select>
+        
+        <br />
+        <button id="pairGPS" onclick="startGPS()">Pair</button><br />
+        <span id="errors"></span><br />
+        
+    </body>
+    <script>
+        let geoWatchID = null;
+        const speedUnitSelection = document.getElementById("speedUnitSelection");
+        let lastScrollY = window.scrollY;
+        let navTimeout;
+
+        // hide navbar after 5 seconds
+        function hideNav() {
+            clearTimeout(navTimeout);
+            navTimeout = setTimeout(() => {
+                document.getElementById("navbar").classList.add("hidden");
+            }, 5000);
+        }
+
+        // initial hide
+        hideNav();
+
+        // show nav when scrolling up
+        window.addEventListener("scroll", () => {
+            let currentScrollY = window.scrollY;
+            if (currentScrollY < lastScrollY) { 
+                document.getElementById("navbar").classList.remove("hidden");
+                hideNav();
+            }
+            lastScrollY = currentScrollY;
+        });
+        // show nav when cursor at top
+        window.addEventListener("mousemove", (e) => {
+            const mouseY = e.clientY;
+            if (mouseY < 50) {
+                document.getElementById("navbar").classList.remove("hidden");
+                hideNav();
+            }
+        });
+        // show nav when touch location at top
+        window.addEventListener("touchmove", (e) => {
+            const mouseY = e.touches[0].clientY;
+            if (mouseY < 100) {
+                document.getElementById("navbar").classList.remove("hidden");
+                hideNav();
+            }
+        });
+        
+        function degToCardinal(deg) {
+            if (deg == null) return "";
+            const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+            deg = deg % 360;
+            if (deg < 0) deg += 360;
+            return directions[Math.round(deg / 45) % 8];
+        }
+        
+        function updateReadout(data, timestamp) {
+            
+            const speedUnit = speedUnitSelection.value;
+            let currentSpeed = "__";
+            if (data.speed != null) {
+                switch(speedUnit) {
+                    case "mph" : currentSpeed = (data.speed * 2.236936); break;
+                    case "kph" : currentSpeed = (data.speed * 3.6); break;
+                    default : currentSpeed = (data.speed); break;
+                }
+                currentSpeed = currentSpeed.toFixed(2);
+            }
+            document.getElementById("speed").textContent = currentSpeed;
+            document.getElementById("speedUnits").textContent = speedUnit;
+            
+            const cardinal = degToCardinal(data.heading);
+            document.getElementById("heading").textContent = cardinal;
+
+            const acc = (data.accuracy + data.altitudeAccuracy).toFixed(2) ?? "null";
+            document.getElementById("accuracy").textContent = "Acc: " + acc;
+            
+            let date = new Date(timestamp);
+            let formattedTime = date.toLocaleTimeString(date);
+            document.getElementById("time-stamp").textContent = formattedTime ?? "null time";
+        }
+        
+        function startGPS() {
+            document.getElementById('errors').textContent = "";
+            if (geoWatchID !== null) {
+                document.getElementById('errors').textContent = "WatchID already created";
+                return;
+            }
+            // Requires HTTPS
+            if ('geolocation' in navigator) {
+                // getCurrentPosition is 1 time, watchPosition is continually called
+                geoWatchID = navigator.geolocation.watchPosition(
+                    position => {
+                        updateReadout(position.coords, position.timestamp);
+                    },
+                    error => {
+                        document.getElementById('errors').textContent = "Geolocation error: " + error.message;
+                        geoWatchID = null;
+                    },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+                );
+            } else {
+                document.getElementById('errors').textContent = "Geolocation is not supported";
+            }
+        }
+    </script>
+</html>
