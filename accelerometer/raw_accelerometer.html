@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="initial-scale=1.0">
+    <title>Accelerometer Data</title>
+    <style>
+        /* css currently focused on portrait orientaiton for a phone */
+        button {
+            font-size: 200%;
+        }
+        .value-display {
+            display: flex;
+            width: 100%;
+            justify-content: space-between;           
+        }
+        .value-display label {
+            flex: 1;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+
+    <h2>Accelerometer With Gravity</h2>
+    <div class="value-display">
+        <label>Raw</label>
+        <label>Snapshot</label>
+        <label>Moving Average</label>
+    </div>
+    <div class="value-display">
+        <label>X: <span id="xGravityRaw">--</span></label>
+        <label>X: <span id="xGravitySnapshot">--</span></label>
+        <label>X: <span id="xGravityAvg">--</span></label>
+    </div>
+    <div class="value-display">
+        <label>Y: <span id="yGravityRaw">--</span></label>
+        <label>Y: <span id="yGravitySnapshot">--</span></label>
+        <label>Y: <span id="yGravityAvg">--</span></label>
+    </div>
+    <div class="value-display">
+        <label>Z: <span id="zGravityRaw">--</span></label>
+        <label>Z: <span id="zGravitySnapshot">--</span></label>
+        <label>Z: <span id="zGravityAvg">--</span></label>
+    </div>
+
+    <h2>Accelerometer Without Gravity</h2>
+    <div class="value-display">
+        <label>Raw</label>
+        <label>Snapshot</label>
+        <label>Moving Average</label>
+    </div>
+    <div class="value-display">
+        <label>X: <span id="xLinearRaw">--</span></label>
+        <label>X: <span id="xLinearSnapshot">--</span></label>
+        <label>X: <span id="xLinearAvg">--</span></label>
+    </div>
+    <div class="value-display">
+        <label>Y: <span id="yLinearRaw">--</span></label>
+        <label>Y: <span id="yLinearSnapshot">--</span></label>
+        <label>Y: <span id="yLinearAvg">--</span></label>
+    </div>
+    <div class="value-display">
+        <label>Z: <span id="zLinearRaw">--</span></label>
+        <label>Z: <span id="zLinearSnapshot">--</span></label>
+        <label>Z: <span id="zLinearAvg">--</span></label>
+    </div>
+
+    <h3>Interval</h3>
+    <label><span id="intervalLen"></span> ms    <span id="intervalHZ"></span> hz</label><br />
+
+    <label>Num Updates: <span id="numUpdates"></span></label>
+
+    <p id="status">Waiting for accelerometer</p>
+    
+    <button id="startAccelerometer" onclick="startAccelerometer()">Pair</button>
+
+    <script src="raw_accelerometer.js"></script>
+</body>
+</html>

@@ -2,19 +2,19 @@
 <html>
     <head>
         <meta charset="UTF-8">
+        <!-- <meta name="viewport" content="initial-scale=1.0"> -->
         <title>Speedometer</title>
         <style>
-            body {
-                font-size: 5em;
-                background-color: black;
-                color: lightgray;
+            body { 
+                font-size: 4em; 
+                background-color: rgb(20, 20, 20); 
+                color: rgb(200, 200, 200); 
             }
-            .topReadout {
-                padding-top: 5vh;
+            #topReadout {
+                padding-top: 10vw;
                 display: flex;
                 align-items: flex-end;
             }
-
             h1, h2, h3 { margin: 0; }
             h1 { text-align: right; width: 50vw; }
             h3 { margin-left: 2vw; }
@@ -34,7 +34,7 @@
     <body>
         <nav id="navbar"><a href="../web_sensors.html"><button>Directory</button></a></nav>
         
-        <div class="topReadout">
+        <div id="topReadout">
             <h1 id="speed">__</h1>
             <h3 id="speedUnits"></h3>
             <h2 id="heading">(--)</h2>
@@ -43,9 +43,9 @@
         <br />
         <br />
         <br />
-        <label><h3 id="time-stamp">Timestamp</h3></label>
+        <h3 id="time-stamp">Timestamp</h3></label>
         <br />
-        <label><h3 id="accuracy">Acc</h3></label>
+        <h3 id="accuracy">Acc</h3>
         <br />
         
         <select id="speedUnitSelection">
