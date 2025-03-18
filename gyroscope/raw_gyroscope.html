@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html land="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="initial-scale=1.0">
+    <style>
+        button {
+            font-size: 200%;
+        }
+        label {
+            display: block;                
+        }
+        #errors {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+    <h1>Gyroscope Data</h1>
+    <p>Alpha (Z-axis): <span id="alpha">--</span>°</p>
+    <p>Beta (X-axis): <span id="beta">--</span>°</p>
+    <p>Gamma (Y-axis): <span id="gamma">--</span>°</p>
+    <p>Absolute: <span id="absolute">--</span></p>
+    <!-- Absolute True = relative to earth, False = arbitrary (reset will always have alpha=0/360°) -->
+
+    <h3>Interval</h3>
+    <label><span id="intervalLen"></span> ms    <span id="intervalHZ"></span> hz</label><br />
+    <button onclick="startGyroscope()">Pair</button>
+    <p id="status">Waiting for sensor data</p>
+
+    <script>
+        function startGyroscope() {
+            document.getElementById("status").textContent = "";
+            if (typeof DeviceMotionEvent.requestPermission === "function") {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+
+                        if (permissionState === "granted") {
+                            enableGyroscope();
+                        } else {
+                            document.getElementById("status").textContent = "Permission denied";
+                        }
+                    })
+                    .catch(error => {
+                        document.getElementById("status").textContent = "Error requesting permission";
+                        console.error(error);
+                    });
+            } else {
+                enableGyroscope();
+            }
+        }
+
+        function enableGyroscope() {
+            let prevTime = 0;
+            if (window.DeviceMotionEvent) {
+                window.addEventListener('deviceorientation', function(event) {
+                    let alpha = event.alpha != null ? event.alpha.toFixed(2) : "null";
+                    let beta = event.beta != null ? event.beta.toFixed(2) : "null";
+                    let gamma = event.gamma != null ? event.gamma.toFixed(2) : "null";
+                    let absolute = event.absolute ? "True" : "False";
+                    
+                    document.getElementById("alpha").textContent = alpha;
+                    document.getElementById("beta").textContent = beta;
+                    document.getElementById("gamma").textContent = gamma;
+                    document.getElementById("absolute").textContent = absolute;
+
+                    let intervalTime = event.timeStamp - prevTime;
+                    prevTime = event.timeStamp;
+                    document.getElementById("intervalLen").textContent = intervalTime ? (intervalTime).toFixed(2) : "null";
+                    let intervalHZ = (1000 / intervalTime);
+                    document.getElementById("intervalHZ").textContent = intervalTime ? intervalHZ.toFixed(2) : "null";
+                    
+                });
+            } else {
+                document.getElementById("status").textContent = "Gyroscope not supported on this device";
+            }
+        }
+
+    </script>
+</body>
+
+</html>
