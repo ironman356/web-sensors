@@ -8,7 +8,7 @@
     <style>
         body {
             background-color: lightgray;
-
+            font-size: 150%;
         }
         #traction_circle {
             /* border: 3px solid red; */
@@ -18,8 +18,11 @@
             margin: auto;
             padding: 0;
         }
-        button {
-            font-size: 200%;
+        button, input {
+            font-size: 120%;
+        }
+        input {
+            width: 20%;
         }
     </style>
 </head>
@@ -32,9 +35,28 @@
     <p id="status">Waiting for accelerometer</p>
 
     <button id="startAccelerometer" onclick="startAccelerometer()">Pair</button>
+    <button id="pausePoints" onclick="togglePause()">Pause</button>
+    <button id="clearPastPoints" onclick="clearPastPoints()">Clear</button>
+    <br />
+    <label for="smoothing">Smoothing:</label>
+    <input id="smoothing" type="number" min="0.001" max="1" step="0.01" value="0.1" inputmode="decimal">
+    <br />
+    <label for="viewAngle">View Angle:</label>
+    <input id="viewAngle" type="number" step="1" value="25" inputmode="decimal" min="-360" max="360">
+    <span>°</span>
+    <br />
+    <label for="maxVisibleAccel">Max Acceleration:</label>
+    <input id="maxVisibleAccel" type="text" step="0.1" value="0.5" inputmode="decimal" min="-100" max="100">
+    <span>g</span>
 
     <footer>
-        *Only uses accelerometer.
+        <ul>
+            <li>Only uses accelerometer.</li>
+            <li>  -  negative symbol to copy/paste becuase ios🤮</li>
+            <li>Smoothing :  1 = no smoothing, 0.01 = lots of smoothing</li>
+            <li>View Angle :  positive = turned right relative to travel direction</li>
+            <li>Max Acceleration : in g's (9.8066 m/s²), negative will flip the circle horizontally and vertically</li>
+        </ul>
     </footer>
     <script src="traction_circle.js"></script>
 </body>
