@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta name="author" content="https://github.com/ironman356">
+    <title>Graph Accelerometer</title>
+    <style>
+
+    </style>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+    <h2>Drive Specs</h2>
+
+    
+    <!-- <label>Speed: <span id="calcSpeed">--</span></label><br/> -->
+
+    <canvas id="accelGraph"></canvas>
+
+    <div id="status">Waiting</div>
+
+    <button id="pairButton">Pair</button>
+
+
+    <script>
+        const ctx = document.getElementById("accelGraph").getContext("2d");
+        const accelGraph = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: Array(100).fill(""),
+                datasets: [
+                    { label: "Raw X", borderColor: "red", data: [], fill: false },
+                    { label: "Raw Y", borderColor: "green", data: [], fill: false },
+                    { label: "Raw Z", borderColor: "blue", data: [], fill: false },
+                ],
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: { y: { beginAtZero: false } },
+            },
+        });
+
+        function startAccelerometer() {
+            document.getElementById("status").textContent = "";
+            if (typeof DeviceMotionEvent.requestPermission === "function") {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === "granted") {
+                            enableAccelerometer();
+                        } else {
+                            document.getElementById("status").textContent = "Permission denied";
+                        }
+                    })
+                    .catch(error => {
+                        document.getElementById("status").textContent = "Error requesting permission";
+                        console.error(error)
+                    });
+            } else {
+                enableAccelerometer(); // Non-iOS devices
+            }
+        }
+        function enableAccelerometer() {
+            if ("DeviceMotionEvent" in window) {
+                window.addEventListener("devicemotion", accelHandler);
+            } else {
+                document.getElementById("status").textContent = "Accelerometer not supported";
+            }
+        }
+        document.getElementById("pairButton").addEventListener("click", function() {
+            startAccelerometer();
+        });
+        function accelHandler(event) {
+            const acc = event.acceleration;
+            if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
+
+            let datasets = accelGraph.data.datasets;
+            let rawValues = [acc.x, acc.y, acc.z];
+
+            datasets.forEach( (dataset, index) => {
+                let newValue = rawValues[index];
+                dataset.data.push(newValue);
+
+                if (dataset.data.length > 100) {
+                    dataset.data.shift();
+                }
+            });
+            accelGraph.update();
+
+        }
+
+    </script>
+</body>
+</html>
