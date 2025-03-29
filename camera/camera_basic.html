@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Basic</title>
+    <style>
+        body { text-align: center; }
+        video { width: 100%; max-width: 600px; margin-top: 20px; }
+        button, select, label { margin: 10px; padding: 10px; font-size: 16px; }
+    </style>
+</head>
+<body>
+  <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+  <h1>Camera Basic</h1>
+  <select id="cameraSelect"></select>
+  <br>
+  <label for="audioCheckbox">Enable Audio</label>
+  <input type="checkbox" id="audioCheckbox">
+  <br>
+  <video id="camera" autoplay playsinline></video>
+  <br>
+  <button id="start" disabled>Start Recording</button>
+  <button id="stop" disabled>Stop Recording</button>
+  <a id="download" style="display: none;" download="recording.webm">Download Recording</a>
+
+  <script>
+    const BITRATE = 30_000_000;
+    const SAVENAME = "recording";
+
+    const video = document.getElementById('camera');
+    const startBtn = document.getElementById('start');
+    const stopBtn = document.getElementById('stop');
+    const downloadLink = document.getElementById('download');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const audioCheckbox = document.getElementById('audioCheckbox');
+
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let currentStream = null;
+
+    async function getCameras() {
+      try {
+          await navigator.mediaDevices.getUserMedia({ video: true, audio: audioCheckbox.checked }); // permission based on checkbox
+
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+          cameraSelect.innerHTML = '';
+          videoDevices.forEach((device, index) => {
+              const option = document.createElement('option');
+              option.value = device.deviceId;
+              option.textContent = device.label || `Camera ${index + 1}`;
+              cameraSelect.appendChild(option);
+          });
+
+          if (videoDevices.length > 0) {
+              startCamera(videoDevices[0].deviceId);
+          }
+      } catch (error) {
+          console.error("Error accessing cameras:", error);
+          alert("Please grant camera access and reload the page.");
+      }
+    }
+
+    async function startCamera(deviceId) {
+      try {
+          // release the previous stream
+          if (currentStream) {
+              currentStream.getTracks().forEach(track => track.stop());
+              video.srcObject = null;
+          }
+
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(device => device.kind === 'videoinput');
+          const videoDevice = videoDevices.find(device => device.deviceId === deviceId);
+
+          if (!videoDevice) {
+              console.error('Camera not found.');
+              return;
+          }
+
+          // get max resolution of the selected camera
+          const stream = await navigator.mediaDevices.getUserMedia({
+              video: { deviceId: { exact: deviceId } },
+              audio: audioCheckbox.checked
+          });
+
+          const track = stream.getVideoTracks()[0];
+          const capabilities = track.getCapabilities();
+          const supportedWidth = capabilities.width.max;
+          const supportedHeight = capabilities.height.max;
+
+          // use the highest resolution
+          const constraints = {
+              video: {
+                  deviceId: { exact: deviceId },
+                  width: { ideal: supportedWidth },
+                  height: { ideal: supportedHeight }
+              },
+              audio: audioCheckbox.checked
+          };
+
+          const finalStream = await navigator.mediaDevices.getUserMedia(constraints);
+          video.srcObject = finalStream;
+          currentStream = finalStream;
+
+          setTimeout(() => setupMediaRecorder(finalStream), 500);
+          startBtn.disabled = false;
+      } catch (error) {
+          console.error("Error starting camera:", error);
+          alert("Unable to access the selected camera.");
+      }
+    }
+
+    function setupMediaRecorder(stream) {
+      recordedChunks = []; // reset recorded chunks
+
+      if (!window.MediaRecorder) {
+          alert("Your browser does not support media recording.");
+          return;
+      }
+
+      let mimeType = "video/webm";
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+          mimeType = "video/mp4"; // fallback
+      }
+
+      try {
+          const options = {
+              mimeType,
+              videoBitsPerSecond: BITRATE
+          };
+
+          mediaRecorder = new MediaRecorder(stream, options);
+
+          mediaRecorder.ondataavailable = event => {
+              if (event.data.size > 0) {
+                  recordedChunks.push(event.data);
+              }
+          };
+
+          mediaRecorder.onstop = () => {
+              const blob = new Blob(recordedChunks, { type: mimeType });
+              recordedChunks = [];
+
+              // URL of blob is download link
+              const url = URL.createObjectURL(blob);
+              downloadLink.href = url;
+              downloadLink.download = SAVENAME;
+              
+              downloadLink.style.display = 'block'; // show the download button
+
+              // auto popup download
+              downloadLink.click();
+
+              // Revoke the object URL to free up memory after download starts
+              // Might cause issues if download fails
+              downloadLink.onload = () => {
+                  URL.revokeObjectURL(url);
+              };
+          };
+      } catch (error) {
+          console.error("Error initializing MediaRecorder:", error);
+          alert("MediaRecorder could not be initialized. Your browser may not support this format.");
+      }
+    }
+
+    startBtn.onclick = () => {
+        if (!mediaRecorder || mediaRecorder.state !== "inactive") {
+            alert("Camera is not ready. Please wait.");
+            return;
+        }
+        recordedChunks = [];
+        mediaRecorder.start();
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+    };
+
+    stopBtn.onclick = () => {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+    };
+
+    cameraSelect.onchange = () => {
+        startBtn.disabled = true; // Disable recording button while switching cameras
+        startCamera(cameraSelect.value);
+    };
+
+    //  restart the camera setup when audio toggled
+    audioCheckbox.onchange = () => {
+        startBtn.disabled = true;
+        startCamera(cameraSelect.value);
+    };
+
+    getCameras();
+  </script>
+</body>
+</html>

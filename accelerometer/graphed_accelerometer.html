@@ -13,7 +13,7 @@
 </head>
 <body>
     <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
-    <h2>Drive Specs</h2>
+    <h2>Graph Accelerometer</h2>
 
     
     <!-- <label>Speed: <span id="calcSpeed">--</span></label><br/> -->
@@ -30,11 +30,11 @@
         const accelGraph = new Chart(ctx, {
             type: "line",
             data: {
-                labels: Array(100).fill(""),
+                labels: Array(330).fill(""),
                 datasets: [
-                    { label: "Raw X", borderColor: "red", data: [], fill: false },
-                    { label: "Raw Y", borderColor: "green", data: [], fill: false },
-                    { label: "Raw Z", borderColor: "blue", data: [], fill: false },
+                    { label: "Raw X", borderColor: "red", borderWidth: 2, pointRadius: 0, data: [], fill: false },
+                    { label: "Raw Y", borderColor: "green", borderWidth: 2, pointRadius: 0, data: [], fill: false },
+                    { label: "Raw Z", borderColor: "blue", borderWidth: 2, pointRadius: 0, data: [], fill: false },
                 ],
             },
             options: {
@@ -84,7 +84,7 @@
                 let newValue = rawValues[index];
                 dataset.data.push(newValue);
 
-                if (dataset.data.length > 100) {
+                if (dataset.data.length > 300) {
                     dataset.data.shift();
                 }
             });

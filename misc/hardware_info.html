@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="initial-scale=1.0">
+    <meta name="author" content="https://github.com/ironman356">
+    <title>Hardware Info</title>
+    <style>
+        body {
+            margin: 5% 5%;
+            font-size: 150%;
+        }
+        button, input {
+            font-size: 120%;
+        }
+    </style>
+</head>
+<body>
+    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+    <h2>Hardware Info</h2>
+
+    <p id="status"></p>
+
+    <h3>Screen</h3>
+    <label>Width: <span id="screenWidth">--</span></label><br />
+    <label>Height: <span id="screenHeight">--</span></label><br />
+    <label>Color Depth: <span id="screenColorDepth">--</span></label><br />
+    <label>Pixel Depth: <span id="screenPixelDepth">--</span></label><br />
+    
+    <label>CPU Threads: <span id="logicalCores">--</span></label><br />
+    <label>Memory: <span id="memory">--</span></label><br />
+    <label>Online: <span id="online">--</span></label><br />
+
+    <script src="hardware_info.js"></script>
+</body>
+</html>
