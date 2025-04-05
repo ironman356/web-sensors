@@ -1,97 +1,55 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="initial-scale=1.0">
-    <meta name="author" content="https://github.com/ironman356">
-    <title>Graph Accelerometer</title>
-    <style>
-
-    </style>
-    <!-- <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="initial-scale=1.0">
+  <meta name="author" content="https://github.com/ironman356">
+  <title>Graph Accelerometer</title>
+  <style>
+    /* css currently focused on portrait orientaiton for a phone */
+    button {
+        font-size: 200%;
+    }
+    .value-display {
+        display: flex;
+        width: 100%;
+        justify-content: space-between;           
+    }
+    .value-display label {
+        flex: 1;
+        text-align: left;
+    }
+</style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
-    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
-    <h2>Graph Accelerometer</h2>
+  <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+  <h2>Graph Accelerometer</h2>
+  
+  <div>
+    <label for="movingAvgWindow">Moving Average Window Size:</label>
+    <input type="number" id="movingAvgWindow" value="10" min="1" inputmode="decimal">
+    <br />
+    <label for="exponentialSmoothing">Exponential smoothing:</label>
+    <input type="number" id="exponentialSmoothing" value="0.1" min="0" inputmode="decimal">
+    <br />
+    <label for="regressionWindow">Local Regression Window Size:</label>
+    <input type="number" id="regressionWindow" value="30" min="1" inputmode="decimal">
+    <br />
+    <label for="lineLabels">Line Labels: </label>
+    <input type="checkbox" id="lineLabels" checked>
+    <br />
 
-    
-    <!-- <label>Speed: <span id="calcSpeed">--</span></label><br/> -->
-
-    <canvas id="accelGraph"></canvas>
-
-    <div id="status">Waiting</div>
-
-    <button id="pairButton">Pair</button>
-
-
-    <script>
-        const ctx = document.getElementById("accelGraph").getContext("2d");
-        const accelGraph = new Chart(ctx, {
-            type: "line",
-            data: {
-                labels: Array(330).fill(""),
-                datasets: [
-                    { label: "Raw X", borderColor: "red", borderWidth: 2, pointRadius: 0, data: [], fill: false },
-                    { label: "Raw Y", borderColor: "green", borderWidth: 2, pointRadius: 0, data: [], fill: false },
-                    { label: "Raw Z", borderColor: "blue", borderWidth: 2, pointRadius: 0, data: [], fill: false },
-                ],
-            },
-            options: {
-                responsive: true,
-                animation: false,
-                scales: { y: { beginAtZero: false } },
-            },
-        });
-
-        function startAccelerometer() {
-            document.getElementById("status").textContent = "";
-            if (typeof DeviceMotionEvent.requestPermission === "function") {
-                DeviceMotionEvent.requestPermission()
-                    .then(permissionState => {
-                        if (permissionState === "granted") {
-                            enableAccelerometer();
-                        } else {
-                            document.getElementById("status").textContent = "Permission denied";
-                        }
-                    })
-                    .catch(error => {
-                        document.getElementById("status").textContent = "Error requesting permission";
-                        console.error(error)
-                    });
-            } else {
-                enableAccelerometer(); // Non-iOS devices
-            }
-        }
-        function enableAccelerometer() {
-            if ("DeviceMotionEvent" in window) {
-                window.addEventListener("devicemotion", accelHandler);
-            } else {
-                document.getElementById("status").textContent = "Accelerometer not supported";
-            }
-        }
-        document.getElementById("pairButton").addEventListener("click", function() {
-            startAccelerometer();
-        });
-        function accelHandler(event) {
-            const acc = event.acceleration;
-            if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
-
-            let datasets = accelGraph.data.datasets;
-            let rawValues = [acc.x, acc.y, acc.z];
-
-            datasets.forEach( (dataset, index) => {
-                let newValue = rawValues[index];
-                dataset.data.push(newValue);
-
-                if (dataset.data.length > 300) {
-                    dataset.data.shift();
-                }
-            });
-            accelGraph.update();
-
-        }
-
-    </script>
+  </div>
+  
+  <canvas id="rawGraph"></canvas>
+  <canvas id="movingAvgGraph"></canvas>
+  <canvas id="exponentialGraph"></canvas>
+  <canvas id="regressionGraph"></canvas>
+  
+  <div id="status">Waiting</div>
+  <button id="pairButton">Pair</button>
+  
+  <script src="graphed_accelerometer.js"></script>
 </body>
 </html>
