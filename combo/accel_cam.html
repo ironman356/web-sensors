@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accel-Graphed Cam</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; }
+    video { display: none; }
+    canvas { 
+      display: block; 
+      margin: 20px auto; 
+      width: 100%; 
+      max-width: 800px; 
+      border: 1px solid #ccc;
+    }
+    button, select, label { margin: 10px; padding: 10px; font-size: 16px; }
+    #status { margin-top: 20px; }
+    .hidden { display: none; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+  <h1>Accel-Graphed Cam</h1>
+  <p id="nuance" style="color: red;">*First selected camera may be cropped, changing selection then back will fix.</p>
+
+  <select id="cameraSelect">
+    <option value="">Select a camera</option>
+  </select>
+  <br>
+  
+  <label for="audioCheckbox">Enable Audio</label>
+  <input type="checkbox" id="audioCheckbox" />
+  <br>
+
+  <video id="camera" autoplay playsinline></video>
+  <canvas id="canvas"></canvas>
+  <br>
+
+  <button id="start" disabled>Start Recording</button>
+  <button id="stop" disabled>Stop Recording</button>
+  <button id="pairButton">Pair</button>
+
+  <a id="download" class="hidden" download="recording.webm">Download Recording</a>
+  <div id="status"></div>
+
+  <div>
+    <label for="exponentialSmoothing">Exponential Smoothing α:</label>
+    <input type="number" id="exponentialSmoothing" value="0.1" min="0" max="1" step="0.01" inputmode="decimal">
+  </div>
+  <div>
+    <label for="legendCheckbox">Show Legend</label>
+    <input type="checkbox" id="legendCheckbox" checked>
+  </div>
+  <canvas id="exponentialGraph" width="600" height="200"></canvas>
+
+  <script src="accel_cam_js/main.js"></script>
+</body>
+</html>
