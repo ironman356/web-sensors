@@ -9,21 +9,28 @@
 </head>
 <body>
     <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
-    <h2>Graph Accelerometer</h2>
+    <h2>WIP</h2>
 
-    <label for="clacSpeed">Calc: </label><span id="calcSpeed">0</span>
+    <label for="calcSpeed">Calc: </label><span id="calcSpeed">0</span>
     <br />
     <label for="gpsSpeed">GPS: </label><span id="gpsSpeed"></span>
     <br />
-    <label for="calcGPSdif">Dif: </label><span id="calcGPSdif"></span>
+    <h3><label for="calcGPSdif">Dif: </label><span id="calcGPSdif"></span></h3>
+    <br />
+    <br />
+    <label for="gpsHeading">Heading: </label><span id="gpsHeading"></span>
+    <br />
+    <label for="gyroAlpha">Alpha: </label><span id="gyroAlpha"></span>
+    <br />
+    <h3><label for="headingAlphaDif">Dif: </label><span id="headingAlphaDif"></span></h3>
     <br />
     <canvas id="tractionCircle"></canvas>
     <br />
     <button id="pairButton">Pair</button>
     <p id="GPStemp"></p>
     <p id="ACCtemp"></p>
-    
+    <p id="GYROtemp"></p>
 
-    <script type="module" src="main.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>

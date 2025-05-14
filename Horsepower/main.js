@@ -2,11 +2,12 @@
 
 const pairButton = document.getElementById("pairButton");
 
-const gpsSpeed = document.getElementById("gpsSpeed");
-const clacSpeed = document.getElementById("clacSpeed");
-const calcGPSdif = document.getElementById("calcGPSdif");
-
-
+const gpsSpeedEl = document.getElementById("gpsSpeed");
+const calcSpeedEl = document.getElementById("calcSpeed");
+const calcGPSdifEl = document.getElementById("calcGPSdif");
+const gpsHeadingEl = document.getElementById("gpsHeading");
+const gyroAlphaEl = document.getElementById("gyroAlpha");
+const headingAlphaDifEl = document.getElementById("headingAlphaDif");
 
 
 let geoWatchId = null;
@@ -16,8 +17,9 @@ pairButton.addEventListener("click", () => {
     // pair / enable everything
     if (pairButton.textContent == "Pair") {
 
-        if (geoWatchId == null) { toggleGPS(); }
+        enableGPS();
         enableAccelerometer();
+        enableGyroscope();
 
 
         pairButton.textContent = "Un-Pair";
@@ -26,8 +28,9 @@ pairButton.addEventListener("click", () => {
     // un-pair / disable everything
     else {
 
-        if (geoWatchId !== null) { toggleGPS(); }
+        disableGPS();
         disableAccelerometer();
+        disableGyroscope();
 
 
         pairButton.textContent = "Pair";
@@ -70,17 +73,62 @@ function disableAccelerometer() {
 
 function accelHandler(event) {
     const acc = event.acceleration;
+    const rot = event.rotationRate;
     document.getElementById("ACCtemp").innerHTML = (
-        `${acc.x}`
+        `X: ${acc.x}<br>` +
+        `Y: ${acc.y}<br>` +
+        `Z: ${acc.z}<br>` +
+        `Interval: ${event.interval}ms<br>` +
+        `rot a: ${rot.alpha}`
     );
+
+    const calcSpeed = parseFloat(calcSpeedEl.textContent) || 0;
+    calcSpeedEl.textContent = calcSpeed + (acc.z * 2.236936 * event.interval);
 }
 
-function toggleGPS() {
-    if (geoWatchId !== null) {
-        navigator.geolocation.clearWatch(geoWatchId);
-        geoWatchId = null;
-        return;
+function enableGyroscope() {
+    if (typeof DeviceOrientationEvent.requestPermission === "function") {
+        DeviceOrientationEvent.requestPermission().then(permissionState => {
+            if (permissionState === "granted") {
+                if ("DeviceOrientationEvent" in window) {
+                    window.addEventListener("deviceorientation", gyroHandler);
+                } else {
+                    alert("Gyroscope not supported");
+                }
+            }
+            else {
+                alert("Gyroscope Permission denied");
+            }
+        })
+    } else { // ios / android differences
+        if ("DeviceOrientationEvent" in window) {
+            window.addEventListener("deviceorientation", gyroHandler);
+        } else {
+            alert("Gyroscope not supported");
+        }
     }
+}
+function disableGyroscope() {
+    if ("DeviceOrientationEvent" in window) {
+        window.removeEventListener("deviceorientation", gyroHandler);
+    } else {
+        alert("Can't remove gyro listner - not supported");
+    }
+}
+function gyroHandler(event) {
+    document.getElementById("GYROtemp").innerHTML = (
+        `Absolute: ${event.absolute}<br>` +
+        `Alpha: ${event.alpha}<br>` + 
+        `Beta: ${event.beta}<br>` +
+        `Gamma: ${event.gamma}`
+    );
+    gyroAlphaEl.textContent = event.alpha.toFixed(2);
+}
+
+
+
+
+function enableGPS() {
     if ("geolocation" in navigator) {
         geoWatchId = navigator.geolocation.watchPosition(
             gpsHandler,
@@ -93,24 +141,25 @@ function toggleGPS() {
         );
     } else {
         alert("geolocation not supported");
-        return;
     }
     return;
 }
 
+function disableGPS() {
+    if (geoWatchId !== null) {
+        navigator.geolocation.clearWatch(geoWatchId);
+        geoWatchId = null;
+        return;
+    }
+    else {
+        alert("gps disable when not set");
+        return;
+    }
+}
+
 function gpsHandler({ coords, timestamp }) {
     const iso = new Date(timestamp).toISOString();
-    const { latitude, longitude, accuracy, altitude, altitudeAccuracy, speed, heading} = coords;
-
-    if (speed !== null) {
-        const gpsSpeedMph = speed * 2.236936;
-        const calcSpeedValue = parseFloat(clacSpeed.textContent) || 0;
-        const speedDifference = Math.abs(calcSpeedValue - gpsSpeedMph);
-        
-        clacSpeed.textContent =  gpsSpeedMph.toFixed(2);
-        gpsSpeed.textContent = gpsSpeedMph.toFixed(2);
-        calcGPSdif.textContent = speedDifference.toFixed(2);
-    }
+    const { latitude, longitude, altitude, accuracy, altitudeAccuracy, heading, speed } = coords;
 
     document.getElementById("GPStemp").innerHTML = (
         `${iso}<br>` + 
@@ -119,11 +168,36 @@ function gpsHandler({ coords, timestamp }) {
         `Alt: ${altitude ?? "n/a"} m<br>` +
         `Acc: ${accuracy} m-95%ci<br>` +
         `Alt-acc: ${altitudeAccuracy} m-95%ci<br>` +
-        `Speed: ${speed ?? "n/a"} m/s<br>` +
-        `Heading: ${heading ?? "n/a"}°`
+        `Speed: ${speed} m/s<br>` +
+        `Heading: ${heading}°`
     );
+
+    gpsSpeedEl.textContent = speed;
+    if (speed !== null) {
+        const gpsMPH = speed * 2.236936;
+        gpsSpeedEl.textContent = gpsMPH.toFixed(2);
+
+        const calcSpeed = parseFloat(calcSpeedEl.textContent) || 0;
+        const speedDif = Math.abs(calcSpeed - gpsMPH);
+
+        calcSpeedEl.textContent = gpsMPH.toFixed(2);
+        calcGPSdifEl.textContent = speedDif.toFixed(2);
+    }
+
+    gpsHeadingEl.textContent = heading;
+    if (heading !== null) {
+        const alpha = parseFloat(gyroAlphaEl.textContent) || 0;
+        headingAlphaDifEl.textContent = angleDist(heading, alpha).toFixed(2);
+    }
 }
 
 function onGPSError(error) {
     alert(`GPS error: ${error.message}`);
 }
+
+function angleDist(a, b) {
+  let diff = Math.abs(a - b) % 360;
+  return diff > 180 ? 360 - diff : diff;
+}
+
+
