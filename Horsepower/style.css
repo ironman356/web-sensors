@@ -7,3 +7,8 @@ button {
     width: 50px;
     aspect-ratio: 1/1;
 }
+
+#debugGraph {
+    width: 500px;
+    height: 250px;
+}
