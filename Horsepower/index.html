@@ -11,6 +11,7 @@
 
 </head>
 <body>
+    <h3>debug: V1.2</h3>
     <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
     <h2>WIP</h2>
 
@@ -27,8 +28,11 @@
     <br />
     <h3><label for="headingAlphaDif">Dif: </label><span id="headingAlphaDif"></span></h3>
     <br />
-    <canvas id="tractionCircle"></canvas>
-    <canvas id="debugGraph"></canvas>
+    <canvas id="tractionCircle" hidden></canvas>
+    <canvas id="debugGraphRotationRate" class="chart"></canvas>
+    <canvas id="debugGraphGyroHeading" class="chart"></canvas>
+    <canvas id="debugGraphAcceleration" class="chart"></canvas>
+    <canvas id="debugGraphSpeed" class="chart"></canvas>
     <video id="debugCamera" width="320" height="240" autoplay muted playsinline></video>
     <br />
     <button id="pairButton">Pair</button>

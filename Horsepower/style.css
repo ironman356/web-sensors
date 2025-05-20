@@ -8,7 +8,7 @@ button {
     aspect-ratio: 1/1;
 }
 
-#debugGraph {
-    width: 500px;
-    height: 250px;
+.chart {
+    width: 100%;
+    max-height: 120px;
 }

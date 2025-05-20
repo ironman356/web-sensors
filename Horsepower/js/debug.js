@@ -1,30 +1,20 @@
 
 
-export function debugChartInit() {
-    const ctx = document.getElementById("debugGraph").getContext('2d');
+export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
+    const ctx = document.getElementById(chartElId).getContext('2d');
     return new Chart(ctx, {
         type: "line",
         data: {
-            datasets: [
-                {
-                    label: "GPS",
+            datasets:
+                lineLabels.map((label, i) => ({
+                    label,
                     data: [],
-                    borderColor: "red",
+                    borderColor: ["red","blue","green","black","orange","purple"][i % 6],
                     borderWidth: 2,
                     tension: 0,
                     pointRadius: 0,
                     pointHoverRadius: 0
-                },
-                {
-                    label: "CALC",
-                    data: [],
-                    borderColor: "blue",
-                    borderWidth: 2,
-                    tension: 0,
-                    pointRadius: 0,
-                    pointHoverRadius: 0
-                }
-            ],
+                }))
         },
         options: {
             responsive: true,
@@ -43,7 +33,7 @@ export function debugChartInit() {
                     display: false
                 },
                 y: {
-                    title: { display: true, text: "Speed" },
+                    title: { display: true, text: yAxisLabel },
                     beginAtZero: false
                 }
             },
@@ -51,16 +41,29 @@ export function debugChartInit() {
     });
 }
 
+const CHARTCUTOFF = 5_000;
+export function debugChartSetData(chart, datasetIndex, data) {
+    // chart.data.datasets[datasetIndex].data.push({ x: timestamp, y: value });
+    chart.data.datasets[datasetIndex].data = data; 
 
-export function pushData(chart, datasetIndex, timestamp, value) {
-    chart.data.datasets[datasetIndex].data.push({ x: timestamp, y: value });
-
-    const cutoff = timestamp - 5_000;
+    const cutoff = data[data.length - 1].x - CHARTCUTOFF;
     chart.data.datasets.forEach(ds => {
         ds.data = ds.data.filter(pt => pt.x >= cutoff);
     });
 
-    chart.options.scales.x.min = cutoff;
+    // chart.options.scales.x.min = cutoff;
+    chart.update(datasetIndex === 0 ? 'none' : undefined);
+}
+
+export function debugChartPushData(chart, datasetIndex, timestamp, value) {
+    chart.data.datasets[datasetIndex].data.push({ x: timestamp, y: value });
+
+    const cutoff = timestamp - CHARTCUTOFF;
+    chart.data.datasets.forEach(ds => {
+        ds.data = ds.data.filter(pt => pt.x >= cutoff);
+    });
+
+    // chart.options.scales.x.min = cutoff;
     chart.update(datasetIndex === 0 ? 'none' : undefined);
 }
 
