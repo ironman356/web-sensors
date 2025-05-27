@@ -1,6 +1,6 @@
 import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, removeGPS } from "./pairing.js";
 import { debugChartInit, debugChartSetData, debugChartPushData, startDebugCamera } from "./debug.js";
-
+import { vectorRotation3d } from "./math.js";
 const pairButton = document.getElementById("pairButton");
 
 const gpsSpeedEl = document.getElementById("gpsSpeed");
@@ -8,11 +8,15 @@ const calcSpeedEl = document.getElementById("calcSpeed");
 const calcGPSdifEl = document.getElementById("calcGPSdif");
 const gpsHeadingEl = document.getElementById("gpsHeading");
 
+const inclineEl = document.getElementById("incline");
+const rollEl = document.getElementById("roll");
+
 
 // const gyroAlphaEl = document.getElementById("gyroAlpha");
 // const headingAlphaDifEl = document.getElementById("headingAlphaDif");
 
-const debugChartGyroDif = debugChartInit("debugGraphGyroDif", ["Beta","Gamma"], "° from ref");
+// const debugChartGyroDif = debugChartInit("debugGraphGyroDif", ["Beta","Gamma"], "° from ref");
+const debugChartInclineRoll = debugChartInit("debugGraphInclineRoll", ["incline", "roll"], "°");
 const debugChartNormAcc = debugChartInit("debugGraphNormAcceleration", ["X","Y","Z"], "normAcc m/s");
 const debugSpeedChart = debugChartInit("debugGraphSpeed", ["GPS","CALC"], "Speed *MPH");
 const debugAccChart = debugChartInit("debugGraphAcceleration", ["X","Y","Z"], "acc m/s");
@@ -24,13 +28,7 @@ let calcData = [{ x: 0, y: 0}];
 
 startDebugCamera("debugCamera");
 
-/**
- * Current normalized acceleration:
- *  X: turning ie left/right
- *  Y: acceleration ie forwards/backwards
- *  Z: vertical ie up/down
- *  normalized should equal raw values with phone laying flat w/screen up; alpha/pointed towards front/direction of travel
- */
+
 
 
 function gpsSpeedUpdate(speed, timestamp) {
@@ -84,62 +82,12 @@ pairButton.addEventListener("click", () => {
     }
 });
 
-function normalizeAcceleration(acc, gyro) {
 
-    const [_, betaDeg, gammaDeg] = gyro;
-
-    // rads
-    // const alpha = alphaDeg * Math.PI / 180;
-    const alpha = -refGyroDeg.alpha * Math.PI / 180;
-    const beta = betaDeg * Math.PI / 180;
-    let gamma = gammaDeg * Math.PI / 180;
-
-    // accounting for gimbal lock,
-    if (betaDeg > 85 && betaDeg < 95) {
-        gamma = 0;
-        // no need to adjust alpha as it won't actually be based on gyro for this implemtation and therefore will be consistent
-    }
-
-    // Rotation matrices
-    const Rz = [
-        [Math.cos(alpha), -Math.sin(alpha), 0],
-        [Math.sin(alpha),  Math.cos(alpha), 0],
-        [0, 0, 1]
-    ];
-
-    const Rx = [
-        [1, 0, 0],
-        [0, Math.cos(beta), -Math.sin(beta)],
-        [0, Math.sin(beta),  Math.cos(beta)]
-    ];
-
-    const Ry = [
-        [Math.cos(gamma), 0, Math.sin(gamma)],
-        [0, 1, 0],
-        [-Math.sin(gamma), 0, Math.cos(gamma)]
-    ];
-
-    //  rotation matrix R = Rz * Rx * Ry
-    const multiply = (A, B) =>
-        A.map((row, i) =>
-            B[0].map((_, j) =>
-                row.reduce((sum, _, k) => sum + A[i][k] * B[k][j], 0)
-            )
-        );
-    const R = multiply(multiply(Rz, Rx), Ry);
-
-    const rotated = {
-        x: R[0][0] * acc[0] + R[0][1] * acc[1] + R[0][2] * acc[2],
-        y: R[1][0] * acc[0] + R[1][1] * acc[1] + R[1][2] * acc[2],
-        z: R[2][0] * acc[0] + R[2][1] * acc[1] + R[2][2] * acc[2],
-    };
-
-    return rotated;
-}
 
 
 function accelHandler(event) {
     const acc = event.acceleration;
+    // const acc = event.accelerationIncludingGravity;
     const rot = event.rotationRate;
     // document.getElementById("ACCtemp").innerHTML = (
     //     `X: ${acc.x}<br>` +
@@ -170,13 +118,17 @@ function accelHandler(event) {
     accReadout.z = acc.z;
     // Object.assign(accReadout, acc); // idk
     // const normAcc = normalizeAcceleration([accReadout.x, accReadout.y, accReadout.z], [gyroReadout.alpha, gyroReadout.beta, gyroReadout.gamma]);
-    const normAcc = normalizeAcceleration([accReadout.x, accReadout.y, accReadout.z], [refGyroDeg.alpha, refGyroDeg.beta, refGyroDeg.gamma]);
+    const normAcc = vectorRotation3d([accReadout.x, accReadout.y, accReadout.z], [refGyroDeg.alpha, -refGyroDeg.beta, refGyroDeg.gamma], true);
+      // -beta b/c ccw around each axis - apple trying to be dif or something idk
+    normAcc.x *= -1; normAcc.y *= -1; normAcc.z *= -1;
+
     debugChartPushData(debugChartNormAcc, 0, timestamp, normAcc.x);
     debugChartPushData(debugChartNormAcc, 1, timestamp, normAcc.y);
     debugChartPushData(debugChartNormAcc, 2, timestamp, normAcc.z);
     
     const newSpeed = prevCalcSpeed + (normAcc.y * 2.236936 * event.interval);
     calcData.push({ x: timestamp, y: newSpeed});
+    if (calcData.length > 500) calcData.shift();
     debugChartSetData(debugSpeedChart, 1, calcData);
     calcSpeedEl.textContent = newSpeed.toFixed(2);
 }
@@ -195,7 +147,7 @@ function gyroHandler(event) {
     );
 
     // gyroAlphaEl.textContent = event.alpha.toFixed(2);
-    
+
     const timestamp = Date.now();
     debugChartPushData(debugHeadingChart, 0, timestamp, event.webkitCompassHeading);
     // debugChartPushData(debugGyroHeadingChart, 0, timestamp, normAlpha);
@@ -203,35 +155,20 @@ function gyroHandler(event) {
     // debugChartPushData(debugGyroHeadingChart, 2, timestamp, normGamma);
     gyroReadout.alpha = event.alpha;
     gyroReadout.beta = event.beta;
-    gyroReadout.gamma = event.gamma;
-    debugChartPushData(debugChartGyroDif, 0, timestamp, refGyroDeg.beta-event.beta);
-    if (event.beta > 95 || event.beta < 85) { // prevent gimbal lock from runining debug graph
-        debugChartPushData(debugChartGyroDif, 1, timestamp, event.gamma);
+    const gimbalLockThreshold = 5;
+    if (Math.abs(event.beta) > 90 - gimbalLockThreshold && Math.abs(event.beta) < 90 + gimbalLockThreshold) {
+      gyroReadout.gamma = 0;
+      // alpha = combo..?
+    } else {
+      gyroReadout.gamma = event.gamma;
     }
+    const gyroCopy = [0, gyroReadout.beta * Math.PI / 180, gyroReadout.gamma * Math.PI / 180];
+    const gyroAdjusted = vectorRotation3d(gyroCopy, [refGyroDeg.alpha, refGyroDeg.beta, refGyroDeg.gamma], true);
     
-    
-}
-// function normalizeOrientation(alpha, beta, gamma) {
-//     // normalize angles because raw device orientation is no bueno
-//     let flip = false;
-
-//     if (beta > 90) {
-//         beta = 180 - beta;
-//         gamma = -gamma;
-//         flip = true;
-//     } else if (beta < -90) {
-//         beta = -180 - beta;
-//         gamma = -gamma;
-//         flip = true;
-//     }
-
-//     if (flip) {
-//         alpha = (alpha + 180) % 360;
-//     }
-
-//     return { alpha, beta, gamma };
-// }
-
+    debugChartPushData(debugChartInclineRoll, 0, timestamp, (gyroAdjusted.y * 180 / Math.PI));
+    debugChartPushData(debugChartInclineRoll, 1, timestamp, (gyroAdjusted.z * 180 / Math.PI));
+    document.getElementById("headingAlphaDif").textContent = "e";
+  }
 
 
 
@@ -275,10 +212,3 @@ function gpsHandler({ coords, timestamp }) {
 function onGPSError(error) {
     alert(`GPS error: ${error.message}`);
 }
-
-function angleDist(a, b) {
-  let diff = Math.abs(a - b) % 360;
-  return diff > 180 ? 360 - diff : diff;
-}
-
-
