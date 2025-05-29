@@ -50,3 +50,28 @@ function makeRotationMatrix(alpha, beta, gamma) {
     ];
     return matrixMultiply(matrixMultiply(Rz, Ry), Rx);
 }
+
+export function rotateEulerAngles(angles, rotation, inverse) {
+    const [a1, b1, g1] = angles.map(d => d * Math.PI / 180);    // Input angles
+    const [a2, b2, g2] = rotation.map(d => d * Math.PI / 180);  // Rotation to apply
+
+    const R1 = makeRotationMatrix(a1, b1, g1);
+    const R2 = makeRotationMatrix(a2, b2, g2);
+
+    const R2_applied = inverse
+        ? R2[0].map((_, j) => R2.map(row => row[j])) // transpose
+        : R2;
+
+    const R_final = matrixMultiply(R2_applied, R1);
+
+    // Extract Euler angles from resulting rotation matrix (ZXY order)
+    const x = Math.asin(-R_final[1][2]);
+    const y = Math.atan2(R_final[0][2], R_final[2][2]);
+    const z = Math.atan2(R_final[1][0], R_final[1][1]);
+
+    return {
+        alpha: z * 180 / Math.PI,
+        beta: x * 180 / Math.PI,
+        gamma: y * 180 / Math.PI
+    };
+}

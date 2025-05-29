@@ -1,6 +1,7 @@
 import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, removeGPS } from "./pairing.js";
 import { debugChartInit, debugChartSetData, debugChartPushData, startDebugCamera } from "./debug.js";
-import { vectorRotation3d } from "./math.js";
+import { vectorRotation3d, rotateEulerAngles } from "./math.js";
+import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
 const pairButton = document.getElementById("pairButton");
 
 const gpsSpeedEl = document.getElementById("gpsSpeed");
@@ -56,7 +57,6 @@ function gpsSpeedUpdate(speed, timestamp) {
     }
 }
 
-const gyroReadout = {alpha: 0, beta: 0, gamma: 0};
 const accReadout = {x: 0, y: 0, z: 0};
 const refGyroDeg = {alpha: 20, beta: 70, gamma: 0}; // normalized rotation such that z points in travel direction. alpha, beta, gamma -> hardcoded for now
 
@@ -83,6 +83,13 @@ pairButton.addEventListener("click", () => {
 });
 
 
+const kalQ = (10 * 1 / 60) ** 2;
+// const expX = new ExponentialSmooth({ alpha: 1 });
+// const expY = new ExponentialSmooth({ alpha: 1 });
+// const expZ = new ExponentialSmooth({ alpha: 1 });
+const kalmanX = new AdaptiveKalman({ Q: kalQ});
+const kalmanY = new AdaptiveKalman({ Q: kalQ });
+const kalmanZ = new AdaptiveKalman({ Q: kalQ });
 
 
 function accelHandler(event) {
@@ -97,6 +104,15 @@ function accelHandler(event) {
     //     `rot a: ${rot.alpha}`
     // );
     if (!acc || !rot) { return; }
+
+    const filterAcc = {
+        // x: kalmanX.update( expX.update(acc.x) ),
+        // y: kalmanY.update( expY.update(acc.y) ),
+        // z: kalmanZ.update( expZ.update(acc.z) )
+        x: kalmanX.update( acc.x ),
+        y: kalmanY.update( acc.y ),
+        z: kalmanZ.update( acc.z )
+    };
 
     
     const prevCalcSpeed = calcData[calcData.length - 1].y || 0; // y on graph axis, not acc.y
@@ -113,11 +129,10 @@ function accelHandler(event) {
     // debugChartPushData(debugRotRateChart, 2, timestamp, rot.gamma);
     
     
-    accReadout.x = acc.x;
-    accReadout.y = acc.y;
-    accReadout.z = acc.z;
+    accReadout.x = filterAcc.x;
+    accReadout.y = filterAcc.y;
+    accReadout.z = filterAcc.z;
     // Object.assign(accReadout, acc); // idk
-    // const normAcc = normalizeAcceleration([accReadout.x, accReadout.y, accReadout.z], [gyroReadout.alpha, gyroReadout.beta, gyroReadout.gamma]);
     const normAcc = vectorRotation3d([accReadout.x, accReadout.y, accReadout.z], [refGyroDeg.alpha, -refGyroDeg.beta, refGyroDeg.gamma], true);
       // -beta b/c ccw around each axis - apple trying to be dif or something idk
     normAcc.x *= -1; normAcc.y *= -1; normAcc.z *= -1;
@@ -153,20 +168,19 @@ function gyroHandler(event) {
     // debugChartPushData(debugGyroHeadingChart, 0, timestamp, normAlpha);
     // debugChartPushData(debugGyroHeadingChart, 1, timestamp, normBeta);
     // debugChartPushData(debugGyroHeadingChart, 2, timestamp, normGamma);
-    gyroReadout.alpha = event.alpha;
-    gyroReadout.beta = event.beta;
+    const gyroReadout = {alpha: refGyroDeg.alpha, beta: event.beta, gamma: event.gamma};
+
     const gimbalLockThreshold = 5;
     if (Math.abs(event.beta) > 90 - gimbalLockThreshold && Math.abs(event.beta) < 90 + gimbalLockThreshold) {
       gyroReadout.gamma = 0;
-      // alpha = combo..?
-    } else {
-      gyroReadout.gamma = event.gamma;
+      // could optionally add synced axes together under gimbal lock but functionally useless 
     }
-    const gyroCopy = [0, gyroReadout.beta * Math.PI / 180, gyroReadout.gamma * Math.PI / 180];
-    const gyroAdjusted = vectorRotation3d(gyroCopy, [refGyroDeg.alpha, refGyroDeg.beta, refGyroDeg.gamma], true);
+
+    const gyroAdjusted = rotateEulerAngles([gyroReadout.alpha, gyroReadout.beta, gyroReadout.gamma], [refGyroDeg.alpha, refGyroDeg.beta, refGyroDeg.gamma], true);
+    debugChartPushData(debugChartInclineRoll, 0, timestamp, gyroAdjusted.beta);
+    debugChartPushData(debugChartInclineRoll, 1, timestamp, gyroAdjusted.gamma);
+    // debugChartPushData(debugChartInclineRoll, 2, timestamp, gyroAdjusted.alpha); // .alpha here is meaningless and should be ignored
     
-    debugChartPushData(debugChartInclineRoll, 0, timestamp, (gyroAdjusted.y * 180 / Math.PI));
-    debugChartPushData(debugChartInclineRoll, 1, timestamp, (gyroAdjusted.z * 180 / Math.PI));
     document.getElementById("headingAlphaDif").textContent = "e";
   }
 
