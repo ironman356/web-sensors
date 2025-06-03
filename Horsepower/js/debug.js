@@ -10,10 +10,10 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
                     label,
                     data: [],
                     borderColor: ["red","blue","green","black","orange","purple"][i % 6],
-                    borderWidth: 2,
+                    borderWidth: 1,
                     tension: 0,
                     pointRadius: 0,
-                    pointHoverRadius: 0
+                    pointHoverRadius: 0,
                 }))
         },
         options: {
@@ -37,6 +37,15 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
                     beginAtZero: false
                 }
             },
+            plugins: {
+                legend: {
+                    labels: {
+                        font: {
+                            size: 10
+                        }
+                    }
+                }
+            }
         },
     });
 }

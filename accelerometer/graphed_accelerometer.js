@@ -148,7 +148,10 @@ function accelHandler(event) {
     const lrWindow = parseInt(document.getElementById("regressionWindow").value, 10);
     const expAlpha = parseFloat(document.getElementById("exponentialSmoothing").value);
 
-    const slice = (arr) => arr.slice(-300);
+    const sliceLength = 300;
+    const baseIndex = Math.max(0, accX.length - sliceLength);
+    const slice = (arr) => arr.slice(baseIndex);
+
 
     // Raw
     const rawX = slice(accX);

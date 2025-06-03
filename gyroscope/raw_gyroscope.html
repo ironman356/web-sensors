@@ -8,29 +8,130 @@
         button {
             font-size: 200%;
         }
-        label {
-            display: block;                
-        }
         #errors {
             color: red;
         }
+        canvas {
+            display: block;
+            max-width: 800px;
+            max-height: 400px;
+        }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
     <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
     <h1>Gyroscope Data</h1>
-    <p>Alpha (Z-axis): <span id="alpha">--</span>°</p>
-    <p>Beta (X-axis): <span id="beta">--</span>°</p>
-    <p>Gamma (Y-axis): <span id="gamma">--</span>°</p>
-    <p>Absolute: <span id="absolute">--</span></p>
+    <label>Alpha (Z-axis): </label><span id="alpha">--</span>°<br />
+    <label>Beta (X-axis): </label><span id="beta">--</span>°<br />
+    <label>Gamma (Y-axis): </label><span id="gamma">--</span>°<br />
+    <label>Absolute: </label><span id="absolute">--</span><br />
+    <canvas id="eulerChart"></canvas>
     <!-- Absolute True = relative to earth, False = arbitrary (reset will always have alpha=0/360°) -->
+    <h3>Quaternion</h3><br />
+    <label>w: </label><span id="qw">--</span><br />
+    <label>x: </label><span id="qx">--</span><br />
+    <label>y: </label><span id="qy">--</span><br />
+    <label>z: </label><span id="qz">--</span><br />
+    <canvas id="quatChart"></canvas>
 
     <h3>Interval</h3>
     <label><span id="intervalLen"></span> ms    <span id="intervalHZ"></span> hz</label><br />
     <button onclick="startGyroscope()">Pair</button>
     <p id="status">Waiting for sensor data</p>
-
+    
     <script>
+
+        /**
+         * adjusted for Z–X′–Y″ Tait–Bryan angles, intrinsic rotations
+         */
+        class Quaternion {
+            constructor(w = 1, x = 0, y = 0, z = 0) {
+                this.w = w;
+                this.x = x;
+                this.y = y;
+                this.z = z;
+            }
+
+            clone() {
+                return new Quaternion(this.w, this.x, this.y, this.z);
+            }
+
+            // Set from intrinsic Z–X′–Y″ Tait–Bryan angles (yaw–pitch–roll)
+            setFromEulerIntrinsic(alpha, beta, gamma) {
+                const cz = Math.cos(alpha / 2);
+                const sz = Math.sin(alpha / 2);
+                const cx = Math.cos(beta / 2);
+                const sx = Math.sin(beta / 2);
+                const cy = Math.cos(gamma / 2);
+                const sy = Math.sin(gamma / 2);
+
+                this.w = cz * cx * cy - sz * sx * sy;
+                this.x = cz * sx * cy + sz * cx * sy;
+                this.y = cz * cx * sy - sz * sx * cy;
+                this.z = sz * cx * cy - cz * sx * sy;
+
+                return this;
+            }
+
+
+            // Returns intrinsic Z–X′–Y″ Tait–Bryan angles
+            getEulerIntrinsic() {
+                const { w, x, y, z } = this;
+
+                // Compute rotation matrix from quaternion
+                const R = [
+                    [1 - 2 * (y * y + z * z),     2 * (x * y - z * w),     2 * (x * z + y * w)],
+                    [    2 * (x * y + z * w), 1 - 2 * (x * x + z * z),     2 * (y * z - x * w)],
+                    [    2 * (x * z - y * w),     2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]
+                ];
+
+                // Extract Z-X-Y intrinsic (yaw-pitch-roll)
+                const beta = Math.asin(Math.max(-1, Math.min(1, R[2][0]))); // asin in safe domain
+                const alpha = Math.atan2(-R[1][0], R[0][0]); // yaw
+                const gamma = Math.atan2(-R[2][1], R[2][2]); // roll
+
+                return [alpha, beta, gamma];
+            }
+
+            // Returns extrinsic Y–X–Z Tait–Bryan angles (equivalent to intrinsic Z–X′–Y″)
+            getEulerExtrinsic() {
+                const { w, x, y, z } = this;
+
+                // Compute rotation matrix
+                const R = [
+                    [1 - 2 * (y * y + z * z),     2 * (x * y - z * w),     2 * (x * z + y * w)],
+                    [    2 * (x * y + z * w), 1 - 2 * (x * x + z * z),     2 * (y * z - x * w)],
+                    [    2 * (x * z - y * w),     2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]
+                ];
+
+                // Extract extrinsic Y-X-Z angles
+                const beta = Math.asin(-R[1][2]); // pitch
+                const alpha = Math.atan2(R[0][2], R[2][2]); // yaw
+                const gamma = Math.atan2(R[1][0], R[1][1]); // roll
+
+                return [alpha, beta, gamma];
+            }
+
+            // Rotate (multiply) by another quaternion
+            rotate(q) {
+                const w1 = this.w, x1 = this.x, y1 = this.y, z1 = this.z;
+                const w2 = q.w, x2 = q.x, y2 = q.y, z2 = q.z;
+
+                this.w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2;
+                this.x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2;
+                this.y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2;
+                this.z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2;
+
+                return this;
+            }
+        }
+
+        let prevTime = 0;
+        const quaCur = new Quaternion();
+        const quaRotation = new Quaternion();
+        quaRotation.setFromEulerIntrinsic(degToRad(0), degToRad(0), degToRad(0));
+        
         function startGyroscope() {
             document.getElementById("status").textContent = "";
             if (typeof DeviceMotionEvent.requestPermission === "function") {
@@ -53,31 +154,137 @@
         }
 
         function enableGyroscope() {
-            let prevTime = 0;
             if (window.DeviceMotionEvent) {
-                window.addEventListener('deviceorientation', function(event) {
-                    let alpha = event.alpha != null ? event.alpha.toFixed(2) : "null";
-                    let beta = event.beta != null ? event.beta.toFixed(2) : "null";
-                    let gamma = event.gamma != null ? event.gamma.toFixed(2) : "null";
-                    let absolute = event.absolute ? "True" : "False";
-                    
-                    document.getElementById("alpha").textContent = alpha;
-                    document.getElementById("beta").textContent = beta;
-                    document.getElementById("gamma").textContent = gamma;
-                    document.getElementById("absolute").textContent = absolute;
-
-                    let intervalTime = event.timeStamp - prevTime;
-                    prevTime = event.timeStamp;
-                    document.getElementById("intervalLen").textContent = intervalTime ? (intervalTime).toFixed(2) : "null";
-                    let intervalHZ = (1000 / intervalTime);
-                    document.getElementById("intervalHZ").textContent = intervalTime ? intervalHZ.toFixed(2) : "null";
-                    
-                });
+                window.addEventListener('deviceorientation', gyroHandler);
             } else {
                 document.getElementById("status").textContent = "Gyroscope not supported on this device";
             }
         }
+        
+        function degToRad(deg) {
+            return deg * Math.PI / 180;
+        }
+        function radToDeg(rad) {
+            return rad * (180 / Math.PI);
+        }
 
+        function gyroHandler(event) {
+            let alpha = event.alpha != null ? event.alpha.toFixed(2) : "null";
+            let beta = event.beta != null ? event.beta.toFixed(2) : "null";
+            let gamma = event.gamma != null ? event.gamma.toFixed(2) : "null";
+            let absolute = event.absolute ? "True" : "False";
+            
+            document.getElementById("alpha").textContent = alpha;
+            document.getElementById("beta").textContent = beta;
+            document.getElementById("gamma").textContent = gamma;
+            document.getElementById("absolute").textContent = absolute;
+
+            let intervalTime = event.timeStamp - prevTime;
+            prevTime = event.timeStamp;
+            document.getElementById("intervalLen").textContent = intervalTime ? (intervalTime).toFixed(2) : "null";
+            let intervalHZ = (1000 / intervalTime);
+            document.getElementById("intervalHZ").textContent = intervalTime ? intervalHZ.toFixed(2) : "null";
+
+            // quaCur.setFromEuler(degToRad(event.alpha), degToRad(event.beta), degToRad(event.gamma));
+            quaCur.setFromEulerIntrinsic(degToRad(event.alpha), degToRad(event.beta), degToRad(event.gamma));
+            document.getElementById("qw").textContent = quaCur.w;
+            document.getElementById("qx").textContent = quaCur.x;
+            document.getElementById("qy").textContent = quaCur.y;
+            document.getElementById("qz").textContent = quaCur.z;
+
+            const rotatedRad = quaCur.clone().rotate(quaRotation).getEulerIntrinsic();
+            const rotated = {
+                alpha: radToDeg(rotatedRad[0]),
+                beta: radToDeg(rotatedRad[1]),
+                gamma: radToDeg(rotatedRad[2])
+            };
+            addData(rotated.alpha, rotated.beta, rotated.gamma, quaCur.w, quaCur.x, quaCur.y, quaCur.z);
+        }
+
+        // chart js stuff -- can ignore
+
+        const maxPoints = 300;
+
+        const eulerCtx = document.getElementById('eulerChart').getContext('2d');
+        const eulerChart = new Chart(eulerCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                {label: 'Alpha', borderColor: 'red', data: [], fill: false, pointRadius: 0},
+                {label: 'Beta', borderColor: 'green', data: [], fill: false, pointRadius: 0},
+                {label: 'Gamma', borderColor: 'blue', data: [], fill: false, pointRadius: 0},
+                ]
+            },
+            options: { animation:false, scales:{ x:{display:false} }, plugins:{ title:{ display:true, text:'Rotated Euler Angles' } } }
+        });
+
+        const quatCtx = document.getElementById('quatChart').getContext('2d');
+        const quatChart = new Chart(quatCtx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+            {label: 'w', borderColor: 'purple', data: [], fill: false, pointRadius: 0},
+            {label: 'x', borderColor: 'orange', data: [], fill: false, pointRadius: 0},
+            {label: 'y', borderColor: 'teal', data: [], fill: false, pointRadius: 0},
+            {label: 'z', borderColor: 'gray', data: [], fill: false, pointRadius: 0},
+            ]
+        },
+        options: { animation: false, scales: { x: { display: false } } }
+        });
+
+
+        function addData(alpha, beta, gamma, w, x, y, z) {
+            const label = eulerChart.data.labels.length ? eulerChart.data.labels[eulerChart.data.labels.length -1] + 1 : 0;
+
+            eulerChart.data.labels.push(label);
+            eulerChart.data.datasets[0].data.push(alpha);
+            eulerChart.data.datasets[1].data.push(beta);
+            eulerChart.data.datasets[2].data.push(gamma);
+            if (eulerChart.data.labels.length > maxPoints) {
+                eulerChart.data.labels.shift();
+                eulerChart.data.datasets.forEach(ds => ds.data.shift());
+            }
+            eulerChart.update();
+
+            quatChart.data.labels.push(label);
+            quatChart.data.datasets[0].data.push(w);
+            quatChart.data.datasets[1].data.push(x);
+            quatChart.data.datasets[2].data.push(y);
+            quatChart.data.datasets[3].data.push(z);
+            if (quatChart.data.labels.length > maxPoints) {
+                quatChart.data.labels.shift();
+                quatChart.data.datasets.forEach(ds => ds.data.shift());
+            }
+            quatChart.update();
+        }
+        
+        
+        
+        // - - - - - - - - - testing - - - - - - - -
+        function printBothEuler(label, q) {
+            const intrinsic = q.getEulerIntrinsic().map(radToDeg).map(v => v.toFixed(2));
+            const extrinsic = q.getEulerExtrinsic().map(radToDeg).map(v => v.toFixed(2));
+            console.log(`${label} Intrinsic → alpha: ${intrinsic[0]}°, beta: ${intrinsic[1]}°, gamma: ${intrinsic[2]}°`);
+            // console.log(`${label} Extrinsic → alpha: ${extrinsic[0]}°, beta: ${extrinsic[1]}°, gamma: ${extrinsic[2]}°`);
+        }
+
+        let q = new Quaternion().setFromEulerIntrinsic(degToRad(90), degToRad(45), 0);
+        printBothEuler("Initial", q);
+
+
+
+        const qInv = new Quaternion(q.w, -q.x, -q.y, -q.z);
+        printBothEuler("rotation", qInv);
+
+
+        q.rotate(qInv);
+        printBothEuler(`After rotation`, q);
+        q.rotate(qInv);
+        printBothEuler(`After rotation`, q);
+        q.rotate(qInv);
+        printBothEuler(`After rotation`, q);
     </script>
 </body>
 
