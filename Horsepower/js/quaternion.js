@@ -1,23 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="initial-scale=1.0">
-    <style>
-    </style>
-</head>
-<body>
-    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
-    <h1>Quaternion testing</h1>
-    <script>
 
 
-
-
-
-
-class Quaternion {
+export class Quaternion {
     constructor(w = 1, x = 0, y = 0, z = 0) {
         this.w = w;
         this.x = x;
@@ -40,7 +23,6 @@ class Quaternion {
         return [qv.x, qv.y, qv.z];
     }
 
-    // Add this helper
     multiply(q) {
         const w1 = this.w, x1 = this.x, y1 = this.y, z1 = this.z;
         const w2 = q.w, x2 = q.x, y2 = q.y, z2 = q.z;
@@ -101,88 +83,3 @@ class Quaternion {
         return this;
     }
 }
-
-
-        
-        
-function degToRad(deg) {
-    return deg * Math.PI / 180;
-}
-
-function radToDeg(rad) {
-    return rad * 180 / Math.PI;
-}
-
-
-
-
-
-
-
-function printBothEuler(label, q) {
-    const intrinsic = q.getEulerIntrinsic().map(radToDeg).map(v => v.toFixed(2));
-    console.log(`${label} Intrinsic → alpha: ${intrinsic[0]}°, beta: ${intrinsic[1]}°, gamma: ${intrinsic[2]}°`);
-}
-
-
-
-
-const betaDeg = 90;
-const gammaDeg = 5;
-const vec = [-1, .1, -2]; 
-
-
-const qTilt = new Quaternion().setFromEulerIntrinsic(
-  0,
-  degToRad(betaDeg),
-  degToRad(gammaDeg)
-);
-console.log(`tilt ${qTilt.getEulerIntrinsic()}`);
-
-// “Level” the forward vector by undoing tilt
-const vLevel = qTilt.getConjugate().applyToVector(vec);
-console.log(`vLevel ${vLevel}`);
-
-
-const alphaRad = Math.atan2(vLevel[0], -vLevel[1]);
-console.log(`alpharad ${radToDeg(alphaRad)}`);
-
-
-let q = new Quaternion().setFromEulerIntrinsic(alphaRad, degToRad(betaDeg), degToRad(gammaDeg));
-
-
-
-vec[0]=-vec[0], vec[1]=-vec[1], vec[2]=-vec[2]; // accelerometer vectors opposite of device coordinate frame :p
-printBothEuler("Initial", q);
-const qInv = new Quaternion(q.w, -q.x, -q.y, -q.z);
-printBothEuler("inverse", qInv);
-console.log(`vector x${vec[0]}, y${vec[1]}, z${vec[2]}`);
-const vecRotated = qInv.applyToVector(vec);
-console.log(vecRotated);
-
-
-
-
-
-
-
-
-
-const vecUp = [.05, -2, -.3];
-console.log(qInv.applyToVector(vecUp));
-
-const vecleft = [-2, .02, .9];
-console.log(qInv.applyToVector(vecleft));
-
-
-
-
-
-
-
-
-
-    </script>
-</body>
-
-</html>

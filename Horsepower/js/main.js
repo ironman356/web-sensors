@@ -2,6 +2,10 @@ import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, 
 import { debugChartInit, debugChartSetData, debugChartPushData, startDebugCamera } from "./debug.js";
 import { vectorRotation3d, rotateEulerAngles } from "./math.js";
 import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
+import { Quaternion } from "./quaternion.js"
+
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
 
 const pairButton = document.getElementById("pairButton");
 const settingsButton = document.getElementById("settingsMenuButton");
@@ -14,7 +18,8 @@ const horsepowerEl = document.getElementById("horsepower");
 const tractionCircleEl = document.getElementById("tractionCircle");
 
 
-startDebugCamera("debugCamera");
+// startDebugCamera("debugCamera");
+
 
 const rawGPSarr = [];
 const rawACCarr = [];
@@ -22,11 +27,12 @@ const rawGYROarr = [];
 let  accInterval = null;
 const gyroMountAngle = { alpha: null, beta: null, gamma: null };
 
-const debugSensors = debugChartInit("debugSensors", ["x", "y", "z", "a", "b", "g"], "m/s & rads");
+const debugMotionAcc = debugChartInit("debugMotionAcc", ["x", "y", "z"], "m/s");
+const debugMotionRot = debugChartInit("debugMotionRot", ["a", "b", "g"], "deg/s");
 const debugSpeed = debugChartInit("debugGraphSpeed", ["GPS","CALC"], "Speed *MPH");
 
 const GPSoffset = 500; // make dynamic later? -> /account for variance
-
+const startingTimeStamp = Date.now();
 
 // - - pairing sensors - -
 let geoWatchId = null;
@@ -36,7 +42,7 @@ pairButton.addEventListener("click", () => {
     if (pairButton.textContent == "Pair") {
         geoWatchId = pairGPS(gpsHandler, onGPSError);
         pairMotion(accelHandler);
-        pairOrientation(gyroHandler);
+        pairOrientation(gyroHandler);        
         pairButton.textContent = "Un-Pair";
     }
 
@@ -64,7 +70,7 @@ saveButton.addEventListener("click", () => {
             DragCoef: 1,
             RollResistance: 2,
             FronalArea: 3,
-            StartTime: 4,
+            StartTime: startingTimeStamp,
             Weather: {
 
             },
@@ -96,16 +102,16 @@ saveButton.addEventListener("click", () => {
 
 
 
-const kalQ = (10 * 1 / 60) ** 2; // expected max accel ~10 m/s^2 over 1 update
+// const kalQ = (10 * 1 / 60) ** 2; // expected max accel ~10 m/s^2 over 1 update
 // max typical acc, break, lat = 12, 30, 8
 // max acc street: <100, drag strip <250 
 
-// const expX = new ExponentialSmooth({ alpha: 1 });
-// const expY = new ExponentialSmooth({ alpha: 1 });
-// const expZ = new ExponentialSmooth({ alpha: 1 });
-const kalmanX = new AdaptiveKalman({ Q: kalQ});
-const kalmanY = new AdaptiveKalman({ Q: kalQ });
-const kalmanZ = new AdaptiveKalman({ Q: kalQ });
+const expX = new ExponentialSmooth({ alpha: .2 });
+const expY = new ExponentialSmooth({ alpha: .2 });
+const expZ = new ExponentialSmooth({ alpha: .2 });
+// const kalmanX = new AdaptiveKalman({ Q: kalQ});
+// const kalmanY = new AdaptiveKalman({ Q: kalQ });
+// const kalmanZ = new AdaptiveKalman({ Q: kalQ });
 
 
 const invertAcc = true;
@@ -113,7 +119,11 @@ const invertAcc = true;
 function accelHandler(event) {
     const acc = {
         timestamp: event.timeStamp,         // millis since loaded (not started)
-        acceleration: event.acceleration,   // m/s^2 along axis xyz
+        acceleration: {
+            x: expX.update(event.acceleration.x),
+            y: expY.update(event.acceleration.y),
+            z: expZ.update(event.acceleration.z),
+        },   // m/s^2 along axis xyz
         // accelerationIncludingGravity: event.accelerationIncludingGravity,
         rotationRate: {     // rotation degrees/sec right-hand-rule, adjusted to axis to prevent confusion with gyro readout
             x: event.rotationRate.alpha,
@@ -141,27 +151,12 @@ function accelHandler(event) {
     rawACCarr.push(acc);
     document.getElementById("ACCtemp").innerText = JSON.stringify(rawACCarr[rawACCarr.length - 1], null, 2);
 
-
-    // const filterAcc = {
-    //     // x: kalmanX.update( expX.update(acc.x) ),
-    //     // y: kalmanY.update( expY.update(acc.y) ),
-    //     // z: kalmanZ.update( expZ.update(acc.z) )
-    //     x: kalmanX.update( acc.x ),
-    //     y: kalmanY.update( acc.y ),
-    //     z: kalmanZ.update( acc.z )
-    // };
-    
-    // const timestamp = Date.now();
-
-    // accReadout.x = filterAcc.x;
-    // accReadout.y = filterAcc.y;
-    // accReadout.z = filterAcc.z;
-    debugChartPushData(debugSensors, 0, acc.timestamp, acc.acceleration.x);
-    debugChartPushData(debugSensors, 1, acc.timestamp, acc.acceleration.y);
-    debugChartPushData(debugSensors, 2, acc.timestamp, acc.acceleration.z);
-    debugChartPushData(debugSensors, 3, acc.timestamp, acc.rotationRate.z);
-    debugChartPushData(debugSensors, 4, acc.timestamp, acc.rotationRate.x);
-    debugChartPushData(debugSensors, 5, acc.timestamp, acc.rotationRate.y);
+    debugChartPushData(debugMotionAcc, 0, acc.timestamp, acc.acceleration.x);
+    debugChartPushData(debugMotionAcc, 1, acc.timestamp, acc.acceleration.y);
+    debugChartPushData(debugMotionAcc, 2, acc.timestamp, acc.acceleration.z);
+    debugChartPushData(debugMotionRot, 0, acc.timestamp, acc.rotationRate.z);
+    debugChartPushData(debugMotionRot, 1, acc.timestamp, acc.rotationRate.x);
+    debugChartPushData(debugMotionRot, 2, acc.timestamp, acc.rotationRate.y);
 
     // const newSpeed = prevCalcSpeed + (normAcc.y * 2.236936 * event.interval);
     // calcData.push({ x: timestamp, y: newSpeed});
@@ -280,142 +275,92 @@ function pointToLineDist(p1, p2, p3) {
 } 
 
 function gpsHandler(position) {
-    rawGPSarr.push(position);
-    document.getElementById("GPStemp").innerText = JSON.stringify(position, null, 2);
-    
-    return;
+    const adjusted = {
+        timestamp: position.timestamp - startingTimeStamp,      // adjusted from epoch to relative
+        coords: {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            altitude: position.coords.altitude,         // meters
+            accuracy: position.coords.accuracy,         // 95%ci m lateral
+            altitudeAccuracy: position.coords.altitudeAccuracy, // 95%ci m vertical
+            heading: position.coords.heading,
+            speed: position.coords.speed            // m/s
+        }
+    };
+    rawGPSarr.push(adjusted);
+
+    document.getElementById("GPStemp").innerText = JSON.stringify(adjusted, null, 2);
+
     document.getElementById("betaGamma").innerHTML = "bg";
     document.getElementById("status").innerHTML = "ste";
 
-    const { latitude, longitude, altitude, accuracy, altitudeAccuracy, heading, speed } = position.coords;
-    document.getElementById("GPStemp").textContent = "test";
-    document.getElementById("GPStemp").innerHTML = (
-            `${new Date(position.timestamp).toISOString()}<br>` + 
-            `Lat: ${latitude}<br>`+ 
-            `Lon: ${longitude}<br>` +
-            `Alt: ${altitude ?? "n/a"} m<br>` +
-            `Acc: ${accuracy} m-95%ci<br>` +
-            `Alt-acc: ${altitudeAccuracy} m-95%ci<br>` +
-            `Speed: ${speed} m/s<br>` +
-            `Heading: ${heading}°`
-        );
+    mountingBetaGamma: {
+        if (rawGPSarr.length < 3) {
+            break mountingBetaGamma;
+        }
+        const portion = rawGPSarr.slice(-3); // TODO - dynamic later for better accuracy
+            // every new update:
+            //      (spd < threshold) | (acc < threshold) | (altacc < threshold): tail = cur
+            //      alt ~= prev, adjust tail to alt match
+            //      not straight -> adjust tail
+            // if (notlongenough) pass
+        const first = portion[0];
+        const last = portion[portion.length - 1];
+
+        const pathAccuracy = 1;
         
-        // gpsSpeedEl.textContent = speed;
-        // if (speed !== null) {
-        //     const gpsMPH = speed * 2.236936;
-        //     // debugChartPushData(debugSpeedChart, 0, Date.now() - GPSoffset, gpsMPH); // debug only
-            
-            
-        //     // gpsSpeedEl.textContent = gpsMPH.toFixed(2);
-        //     // const calcSpeed = parseFloat(calcSpeedEl.textContent) || 0;
-        //     // const speedDif = Math.abs(calcSpeed - gpsMPH);
-        //     // calcSpeedEl.textContent = gpsMPH.toFixed(2);
-        //     // calcGPSdifEl.textContent = speedDif.toFixed(2);
-        //     // gpsSpeedUpdate(gpsMPH, position.timestamp);
-        // }
+        for (const update of portion) {
 
-        // gpsHeadingEl.textContent = heading;
-        // if (heading !== null) {
-            // const alpha = parseFloat(gyroAlphaEl.textContent) || 0;
-            // headingAlphaDifEl.textContent = angleDist(heading, alpha).toFixed(2);
-            // debugChartPushData(debugHeadingChart, 1, position.timestamp-GPSoffset, heading);
-        // }
+            const c = update.coords;
+            const pointAccuracy = 1;            
 
-        // -----------------------------------------------------
-        const modPos = {
-            coords: {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                altitude: position.coords.altitude,
-                accuracy: position.coords.accuracy,
-                altitudeAccuracy: position.coords.altitudeAccuracy,
-                heading: position.coords.heading,
-                speed: position.coords.speed,
-            },
-            timestamp: position.timestamp - GPSoffset,
-        };
-
-        // document.getElementById("betaGamma").textContent = `${JSON.stringify(modPos)}`;
-        // document.getElementById("betaGamma").textContent += `<br/>${JSON.stringify(position)}`;
-
-        gpsUpdates.push(modPos);
-        if (gpsUpdates.length > 20) {
-            gpsUpdates.shift();
-        } else {
-            document.getElementById("status").innerHTML = `${gpsUpdates.length}`;
-        }
-        mountingBetaGamma: {
-            if (true) { // mounting
-                if (gpsUpdates.length < 3) {
-                    break mountingBetaGamma;
-                }
-                const portion = gpsUpdates.slice(-3); // dynamic later for better accuracy
-                const first = portion[0];
-                const last = portion[portion.length - 1];
-                
-                for (const update of portion) {
-                    const c = update.coords;
-                    if (c.speed < 5 || c.speed == null ) { // m/s spd thres
-                        document.getElementById("status").textContent = "not enough spd";
-                        break mountingBetaGamma;
-                    }
-                    if (c.accuracy < 4) { // lat long acc 95%ci (m) tested openair gives ~2m
-                        document.getElementById("status").textContent = "normal acc lacking";
-                        break mountingBetaGamma;
-                    }
-                    if (c.altitudeAccuracy < 4) { // alt acc 95%ci (m) tested openair gives ~3m
-                        document.getElementById("status").textContent = "alt acc lacking";
-                        break mountingBetaGamma;
-                    }
-                    if (Math.abs(first.coords.altitude - c.altitude) > 1) { // needs to be flat for zeroing beta/gamma
-                        document.getElementById("status").textContent = "alt dif too big";
-                        break mountingBetaGamma;
-                    }
-                    if (pointToLineDist(first.coords, c, last.coords) > 3) { // max horiz dist over area
-                        document.getElementById("status").textContent = "not straight enough";
-                        break mountingBetaGamma;
-                    }
-                }
-    
-                
-                const firstGyroItx = gyroUpdates.findIndex(obj => obj.timeStamp > first.timestamp);
-                const lastGyroItx = gyroUpdates.findIndex(obj => obj.timeStamp > last.timestamp) - 1;
-                
-                if (firstGyroItx < 0 || lastGyroItx < 0) {
-                    document.getElementById("status").textContent = "itx went wrong";
-                    break mountingBetaGamma;
-                }
-                // if beyond here: valid for beta/gamma mount set
-
-                const gyroAvg = { alpha: 0, beta: 0, gamma: 0 };
-                for (let i = firstGyroItx; i < lastGyroItx; i++) {
-                    gyroAvg.alpha += degToRad(gyroUpdates[i].alpha);
-                    gyroAvg.beta += degToRad(gyroUpdates[i].beta);
-                    gyroAvg.gamma += gyroUpdates[i].gamma;
-                }
-                gyroAvg.alpha /= lastGyroItx - firstGyroItx;
-                gyroAvg.beta /= lastGyroItx - firstGyroItx;
-                gyroAvg.gamma /= lastGyroItx - firstGyroItx;
-
-                gyroAvg.alpha = radToDeg(gyroAvg.alpha);
-                gyroAvg.beta = radToDeg(gyroAvg.beta);
-                gyroAvg.gamma = radToDeg(gyroAvg.gamma);
-                
-                document.getElementById("betaGamma").innerHTML = `${new Date(modPos.timestamp).toISOString()} <br /> ${gyroAvg.alpha} <br /> ${gyroAvg.beta} <br /> ${gyroAvg.gamma}`;
-                
-                
-    
-    
-    
+            if (c.speed < 5 || c.speed === null) { // m/s spd thres
+                document.getElementById("status").textContent = `not enough spd ${c.speed}`;
+                break mountingBetaGamma;
             }
-        }
-    }
-    
-    function onGPSError(error) {
-        alert(`GPS error: ${error.message}`);
-    }
 
-function angleDist(a, b) {
-  let diff = Math.abs(a - b) % 360;
-  return diff > 180 ? 360 - diff : diff;
+            pointAccuracy *= (c.accuracy < 3) ? 1 : c.accuracy / 3;
+            pointAccuracy *= (c.altitudeAccuracy < 4) ? 1 : c.altitudeAccuracy / 4;
+            const altDif = Math.abs(first.coords.altitude - c.altitude);
+            pointAccuracy *= (altDif < 1) ? 1 : altDif;
+            const latDif = pointToLineDist(first.coords, c, last.coords);
+            pointAccuracy *= (latDif < 2) ? 1 : latDif / 2;
+
+            if (c.speed != first.coords.speed && c.speed != last.coords.speed) {
+                document.getElementById("fineTune").innerHTML = `midPointacc ${pointAccuracy}`;
+            }
+
+            pathAccuracy += pointAccuracy;
+        }
+
+        const firstGyroItx = gyroUpdates.findIndex(obj => obj.timeStamp > (first.timestamp - GPSoffset));
+        const lastGyroItx = gyroUpdates.findIndex(obj => obj.timeStamp > (last.timestamp - GPSoffset)) - 1;
+        
+        if (firstGyroItx < 0 || lastGyroItx < 0) {
+            document.getElementById("status").textContent = "itx went wrong";
+            break mountingBetaGamma;
+        }
+
+        // if beyond here: valid for beta/gamma mount set
+
+        const gyroMountMedian = { ...gyroUpdates[Math.floor(lastGyroItx - firstGyroItx)] }; // gyro is entirely shallow
+
+        const gimbalLockThreshold = 5;
+        if (Math.abs(gyroMountMedian.beta) > 90 - gimbalLockThreshold && Math.abs(gyroMountMedian.beta) < 90 + gimbalLockThreshold) {
+            gyroMountMedian.gamma = 0;
+        }
+
+        const forwardVec = { x: -1, y: 0.1, z: -2 };
+        const qTilt = new Quaternion().setFromEulerIntrinsic( 0, gyroMountMedian.beta, gyroMountMedian.gamma );
+        const forwardVecLeveled = qTilt.getConjugate().applyToVector([forwardVec.x, forwardVec.y, forwardVec.z]);
+        gyroMountMedian.alpha = Math.atan2(forwardVecLeveled[0], -forwardVecLeveled[1]);
+
+        document.getElementById("betaGamma").innerHTML = `
+                ${new Date().toISOString()} <br />
+                ${JSON.stringify(gyroMountMedian, null, 2)} <br />`; 
+    }
+}
+
+function onGPSError(error) {
+    alert(`GPS error: ${error.message}`);
 }

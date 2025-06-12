@@ -6,13 +6,15 @@
     <meta name="author" content="https://github.com/ironman356">
     <title>Horsepower</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="../favicon.ico" type="image/x-icon">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 </head>
 <body>
     <h3>debug: V1.3</h3>
-    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+    <nav><a href="../web_sensors.html">Directory</a></nav>
+    <a href="./replayer.html">Replayer</a>
     <h2>WIP</h2>
 
     <label for="calcSpeed">Speed: </label><span id="calcSpeed"></span>
@@ -29,9 +31,11 @@
 
 
     <canvas id="debugGraphSpeed" class="chart"></canvas>
-    <canvas id="debugSensors" class="bigChart"></canvas>
+    <canvas id="debugMotionRot" class="bigChart"></canvas>
+    <canvas id="debugMotionAcc" class="bigChart"></canvas>
     <p id="status"></p>
     <p id="betaGamma"></p>
+    <p id="fineTune">tune</p>
     <video id="debugCamera" width="320" height="240" autoplay muted playsinline></video>
 
     <br />

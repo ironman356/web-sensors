@@ -1,19 +1,23 @@
-
-
 button {
     font-size: 200%;
 }
+
 #tractionCircle {
-    width: 50px;
-    aspect-ratio: 1/1;
+    width: 10vw;      /* scale with viewport width */
+    max-width: 50px;  /* keep max size */
+    aspect-ratio: 1 / 1;
 }
 
 .chart {
     width: 100%;
+    height: 15vh;     /* fixed height relative to viewport */
     max-height: 120px;
 }
 
 .bigChart {
     width: 100%;
+    height: 30vh;     /* bigger height */
     max-height: 240px;
 }
+
+
