@@ -17,3 +17,17 @@ body {
     /* border: 2px solid red; */
 
 }
+
+.difReadout {
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    gap: 8px 16px;
+}
+.difReadout label,
+.difReadout span {
+    text-align: right;
+    display: block;
+    background: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+}

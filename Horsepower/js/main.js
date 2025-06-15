@@ -4,8 +4,8 @@ import { vectorRotation3d, rotateEulerAngles } from "./math.js";
 import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
 import { Quaternion } from "./quaternion.js"
 
-document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
+// document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+// document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
 
 const pairButton = document.getElementById("pairButton");
 const settingsButton = document.getElementById("settingsMenuButton");
@@ -120,16 +120,21 @@ function accelHandler(event) {
     const acc = {
         timestamp: event.timeStamp,         // millis since loaded (not started)
         acceleration: {
-            x: expX.update(event.acceleration.x),
-            y: expY.update(event.acceleration.y),
-            z: expZ.update(event.acceleration.z),
+            x: event.acceleration.x,
+            y: event.acceleration.y,
+            z: event.acceleration.z,
         },   // m/s^2 along axis xyz
         // accelerationIncludingGravity: event.accelerationIncludingGravity,
         rotationRate: {     // rotation degrees/sec right-hand-rule, adjusted to axis to prevent confusion with gyro readout
             x: event.rotationRate.alpha,
             y: event.rotationRate.beta,
             z: event.rotationRate.gamma,
-        } 
+        },
+        accelerationIncludingGravity: {
+            x: event.accelerationIncludingGravity.x,
+            y: event.accelerationIncludingGravity.y,
+            z: event.accelerationIncludingGravity.z,
+        }
     };
 
     if (accInterval === null) { // saving seperate from arr to reduce save size

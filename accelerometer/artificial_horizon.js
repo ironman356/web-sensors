@@ -7,21 +7,21 @@ canvas.width = canvas.clientWidth;
 canvas.height = canvas.clientHeight;
 
 
-function toggleGyroPair() {
+function togglAccPair() {
     if (pairButtonEl.textContent.startsWith("Un-Pair")) {
-        window.removeEventListener("deviceorientation", handleOrientation);
+        window.removeEventListener("devicemotion", handleMotion);
         pairButtonEl.textContent = "Pair";
     } else {
-        enableOrientation();
+        enableMotion();
     }
 }
 
-function enableOrientation() {
-    if (typeof DeviceOrientationEvent.requestPermission === "function") {
-        DeviceOrientationEvent.requestPermission()
+function enableMotion() {
+    if (typeof DeviceMotionEvent.requestPermission === "function") {
+        DeviceMotionEvent.requestPermission()
             .then(permissionState => {
                 if (permissionState === "granted") {
-                    window.addEventListener("deviceorientation", handleOrientation);
+                    window.addEventListener("devicemotion", handleMotion);
                     pairButtonEl.textContent = "Un-Pair";
                 } else {
                     pairButtonEl.textContent = "Permission Denied";
@@ -33,8 +33,8 @@ function enableOrientation() {
             });
     } else {
         try {
-            window.addEventListener("deviceorientation", handleOrientation);
-            handleOrientation();
+            window.addEventListener("devicemotion", handleMotion);
+            handleMotion();
         } catch (error) {
             console.log(error);
         }
@@ -43,23 +43,37 @@ function enableOrientation() {
     }
 }
 
-function degToRad(deg) {
-    return deg * Math.PI / 180;
-}
 
-function handleOrientation(event) {
+function handleMotion(event) {
     let pitchDeg, rollDeg;
-    console.log(typeof event);
 
     if (typeof event === "undefined") {
         pitchDeg = Math.random() * 40 - 20;
         rollDeg = Math.random() * 40 - 20;
         console.log(pitchDeg, rollDeg);
     } else {
-        // adjusting pitch to level at beta=90 will cause problems due to gimbal lock
-        // thank you apple for only supporting orientation in euler angles - android has options to get quaternions directly from webapi
-        pitchDeg = event.beta;
-        rollDeg = event.gamma;
+        const accGrav = event.accelerationIncludingGravity;
+        const acc = event.acceleration;
+        const z = normalize([0, -1, 0]); // down
+        const y = normalize([0, 0, 1]); // forward
+        const x = normalize(cross(y, z)); // right
+        const y_corrected = cross(z, x);  // recompute orthogonal y - in case of noise / not originally orthogonal
+
+        const R_mount = [
+            [x[0], y_corrected[0], z[0]],
+            [x[1], y_corrected[1], z[1]],
+            [x[2], y_corrected[2], z[2]],
+        ];
+
+        const g = [accGrav.x-acc.x, accGrav.y-acc.y, accGrav.z-acc.z];
+        const g_dev = matTransposeMultVec(R_mount, g);
+        pitchDeg = radToDeg(Math.atan2(g_dev[1], g_dev[2])); // forward -> down
+        rollDeg = radToDeg(Math.atan2(g_dev[0], g_dev[2])); // right -> down
+
+
+        document.getElementById("pitch").innerHTML = pitchDeg.toFixed(2);
+        document.getElementById("roll").innerHTML = rollDeg.toFixed(2);
+        
     }
     
 
@@ -94,9 +108,9 @@ function handleOrientation(event) {
         ctx.stroke();
     }
     
-
-    console.log(canvas.getBoundingClientRect().width);
+    // console.log(canvas.getBoundingClientRect().width);
 }
+
 
 function getEndPoints(yInt, slope, cirMid, radius) {
     /**
@@ -122,10 +136,31 @@ function getEndPoints(yInt, slope, cirMid, radius) {
 }
 
 
-pairButtonEl.addEventListener("click", toggleGyroPair);
-
+pairButtonEl.addEventListener("click", togglAccPair);
 
 
 function degToRad(deg) {
     return deg * Math.PI / 180;
+}
+function radToDeg(rad) {
+    return rad * 180 / Math.PI;
+}
+function matTransposeMultVec(M, v) {
+  return [
+    M[0][0]*v[0] + M[1][0]*v[1] + M[2][0]*v[2],
+    M[0][1]*v[0] + M[1][1]*v[1] + M[2][1]*v[2],
+    M[0][2]*v[0] + M[1][2]*v[1] + M[2][2]*v[2],
+  ];
+}
+function normalize(v) {
+    const len = Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
+    if (len === 0) return [0,0,0];
+    return [v[0]/len, v[1]/len, v[2]/len];
+}
+function cross(a, b) {
+    return [
+        a[1]*b[2] - a[2]*b[1],
+        a[2]*b[0] - a[0]*b[2],
+        a[0]*b[1] - a[1]*b[0]
+    ];
 }
