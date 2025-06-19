@@ -80,35 +80,69 @@ function handleMotion(event) {
     const cenX = canvas.width / 2;
     const cenY = canvas.width / 2; // bc is square
     
-    ctx.strokeStyle = "black"; // outer border ring 
     ctx.fillStyle = "rgb(135, 206, 235)"; // base sky blue
     ctx.lineWidth = 2;
+    const outerRadius = cenX - (ctx.lineWidth / 2);
     ctx.beginPath();
-    ctx.arc(cenX, cenY, cenX - (ctx.lineWidth / 2), 0, Math.PI*2); // draw outer border ring
+    ctx.arc(cenX, cenY, outerRadius, 0, Math.PI*2);
     ctx.fill();
     ctx.stroke();
-
-    ctx.strokeStyle = "brown";
-
+    
+    ctx.strokeStyle = "green";
+    ctx.fillStyle = "rgb(111, 71, 59)";
+    
     const horizonOffset = Math.tan(degToRad(pitchDeg)) * (canvas.width / 2);
     // console.log(horizonOffset);
-
+    
     const slope = Math.tan(-degToRad(rollDeg));
     // console.log(`slope ${slope}`);
     const [p1, p2] = getEndPoints(horizonOffset, slope, [0, 0], canvas.width/2);
     // console.log(horizonOffset, slope, [canvas.width/2, canvas.height/2], canvas.width/2);
     // console.log(p1);
     // console.log(p2);
-
+    
     if (p1 !== null && p2 !== null) {
         ctx.beginPath();
-        ctx.moveTo(p1[0]+canvas.width/2, p1[1]+canvas.width/2);
-        ctx.lineTo(p2[0]+canvas.width/2, p2[1]+canvas.width/2);
+        ctx.moveTo(p1[0]+cenX, p1[1]+cenY);
+        ctx.lineTo(p2[0]+cenX, p2[1]+cenY);
+        
+        const p1Angle = Math.atan2(p1[1], p1[0]);
+        const p2Angle = Math.atan2(p2[1], p2[0]);
+        
+        if (Math.abs(pitchDeg) > 90) {
+            ctx.arc(cenX, cenY, outerRadius, p2Angle, p1Angle, false);
+            
+        } else {
+            ctx.arc(cenX, cenY, outerRadius, p2Angle, p1Angle, true);
+            
+        }
+        ctx.closePath();
+        ctx.fill();
         
         ctx.stroke();
+    } else {
+        // all sky / ground -> sky already drawn check if ground only
+        if (pitchDeg < 0) {
+            ctx.fillStyle = "rgb(111, 71, 59)";
+            ctx.beginPath();
+            ctx.arc(cenX, cenY, outerRadius, 0, Math.PI*2);
+            ctx.fill();
+            ctx.stroke();
+        }
     }
-    
-    // console.log(canvas.getBoundingClientRect().width);
+    ctx.beginPath();
+    ctx.strokeStyle = "black"; // outer border ring
+    ctx.arc(cenX, cenY, outerRadius, 0, Math.PI*2);
+    ctx.stroke();
+
+    // fill arc leaves ring bounds slightly so im clearing everything outside outer ring
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.arc(cenX, cenY, cenX, 0, Math.PI * 2, true);
+    ctx.clip();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
 }
 
 
@@ -136,9 +170,6 @@ function getEndPoints(yInt, slope, cirMid, radius) {
 }
 
 
-pairButtonEl.addEventListener("click", togglAccPair);
-
-
 function degToRad(deg) {
     return deg * Math.PI / 180;
 }
@@ -146,11 +177,11 @@ function radToDeg(rad) {
     return rad * 180 / Math.PI;
 }
 function matTransposeMultVec(M, v) {
-  return [
-    M[0][0]*v[0] + M[1][0]*v[1] + M[2][0]*v[2],
-    M[0][1]*v[0] + M[1][1]*v[1] + M[2][1]*v[2],
-    M[0][2]*v[0] + M[1][2]*v[1] + M[2][2]*v[2],
-  ];
+    return [
+        M[0][0]*v[0] + M[1][0]*v[1] + M[2][0]*v[2],
+        M[0][1]*v[0] + M[1][1]*v[1] + M[2][1]*v[2],
+        M[0][2]*v[0] + M[1][2]*v[1] + M[2][2]*v[2],
+    ];
 }
 function normalize(v) {
     const len = Math.sqrt(v[0]**2 + v[1]**2 + v[2]**2);
@@ -164,3 +195,5 @@ function cross(a, b) {
         a[0]*b[1] - a[1]*b[0]
     ];
 }
+
+pairButtonEl.addEventListener("click", togglAccPair);
