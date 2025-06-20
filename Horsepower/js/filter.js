@@ -35,3 +35,4 @@ export class ExponentialSmooth {
     return this.value;
   }
 }
+

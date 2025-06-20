@@ -3,8 +3,10 @@ const canvas = document.getElementById("attitudeIndicator");
 const ctx = canvas.getContext("2d");
 const pairButtonEl = document.getElementById("pairButton");
 
-canvas.width = canvas.clientWidth;
-canvas.height = canvas.clientHeight;
+const pixelRatio = window.devicePixelRatio || 1;
+
+canvas.width = canvas.clientWidth * pixelRatio;
+canvas.height = canvas.clientHeight * pixelRatio;
 
 
 function togglAccPair() {
@@ -81,7 +83,7 @@ function handleMotion(event) {
     const cenY = canvas.width / 2; // bc is square
     
     ctx.fillStyle = "rgb(135, 206, 235)"; // base sky blue
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 4;
     const outerRadius = cenX - (ctx.lineWidth / 2);
     ctx.beginPath();
     ctx.arc(cenX, cenY, outerRadius, 0, Math.PI*2);

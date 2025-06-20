@@ -1,8 +1,7 @@
 import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, removeGPS } from "./pairing.js";
 import { debugChartInit, debugChartSetData, debugChartPushData, startDebugCamera } from "./debug.js";
-import { vectorRotation3d, rotateEulerAngles } from "./math.js";
+import { pointToLineDist } from "./math.js";
 import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
-import { Quaternion } from "./quaternion.js"
 
 // document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 // document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
@@ -24,8 +23,9 @@ const tractionCircleEl = document.getElementById("tractionCircle");
 const rawGPSarr = [];
 const rawACCarr = [];
 const rawGYROarr = [];
+
 let  accInterval = null;
-const gyroMountAngle = { alpha: null, beta: null, gamma: null };
+let mountingMatrix;
 
 const debugMotionAcc = debugChartInit("debugMotionAcc", ["x", "y", "z"], "m/s");
 const debugMotionRot = debugChartInit("debugMotionRot", ["a", "b", "g"], "deg/s");
@@ -193,91 +193,11 @@ function gyroHandler(event) {
     rawGYROarr.push(gyro);
     document.getElementById("GYROtemp").innerText = JSON.stringify(gyro, null, 2);
 
-        // const { alpha: normAlpha, beta: normBeta, gamma: normGamma } = normalizeOrientation(event.alpha, event.beta, event.gamma);
-
-    // document.getElementById("GYROtemp").innerHTML = (
-    //     `Absolute: ${event.absolute}<br>` +
-    //     `Alpha: ${event.alpha}<br>` + 
-    //     `Beta: ${event.beta}<br>` +
-    //     `Gamma: ${event.gamma}<br>` +
-    //     `webkitComp: ${event.webkitCompassHeading}<br>` +
-    //     `webkitAcc: ${event.webkitCompassAccuracy}`
-    // );
-    // const props = {};
-    // for (let key in event) {
-    // try {
-    //     props[key] = event[key];
-    // } catch (e) {
-    //     props[key] = "[unreadable]";
-    // }
-    // }
-    // document.getElementById("GYROtemp").innerText = JSON.stringify({event});
-
-    // gyroAlphaEl.textContent = event.alpha.toFixed(2);
-
-    // const timestamp = Date.now();
-    // // debugChartPushData(debugHeadingChart, 0, timestamp, event.webkitCompassHeading);
-    // // debugChartPushData(debugGyroHeadingChart, 0, timestamp, normAlpha);
-    // // debugChartPushData(debugGyroHeadingChart, 1, timestamp, normBeta);
-    // // debugChartPushData(debugGyroHeadingChart, 2, timestamp, normGamma);
-    // // const gyroReadout = {alpha: 0, beta: event.beta, gamma: event.gamma};
-
-    // // const gimbalLockThreshold = 5;
-    // // if (Math.abs(event.beta) > 90 - gimbalLockThreshold && Math.abs(event.beta) < 90 + gimbalLockThreshold) {
-    // //   gyroReadout.gamma = 0;
-    //   // could optionally add synced axes together under gimbal lock but functionally useless 
-    // // }
-    // debugChartPushData(debugSensors, 3, timestamp, degToRad(event.alpha));
-    // debugChartPushData(debugSensors, 4, timestamp, degToRad(event.beta));
-    // debugChartPushData(debugSensors, 5, timestamp, degToRad(event.gamma));
-
-    // const gyro = {alpha: event.alpha, beta: event.beta, gamma: event.gamma, timestamp: event.timestamp}
-    // gyroUpdates.push(gyro);
-    // if (gyroUpdates.length > 600) {
-    //     gyroUpdates.shift();
-    // }
-
-    // const gyroAdjusted = rotateEulerAngles([gyroReadout.alpha, gyroReadout.beta, gyroReadout.gamma], [refGyroDeg.alpha, refGyroDeg.beta, refGyroDeg.gamma], true);
-    // debugChartPushData(debugChartInclineRoll, 0, timestamp, gyroAdjusted.beta);
-    // debugChartPushData(debugChartInclineRoll, 1, timestamp, gyroAdjusted.gamma);
-    // debugChartPushData(debugChartInclineRoll, 2, timestamp, gyroAdjusted.alpha); // .alpha here is meaningless and should be ignored
-    
-    // document.getElementById("headingAlphaDif").textContent = "e";
-  }
-function degToRad(deg) {
-    return deg * Math.PI / 180;
-}
-function radToDeg(rad) {
-    return rad * 180 / Math.PI;
 }
 
 
-function toXY(lat, lon, lat0, lon0) {
-    const R = 6371000; // earth radius in meters
-    const dLat = (lat - lat0) * Math.PI / 180;
-    const dLon = (lon - lon0) * Math.PI / 180;
-    const x = R * dLon * Math.cos(lat0 * Math.PI / 180);
-    const y = R * dLat;
-    return [x, y];
-}
 
-function pointToLineDist(p1, p2, p3) {
-    // p1 = start, p3 = end, p2 = point to check
-    const lat0 = p1.latitude;
-    const lon0 = p1.longitude;
 
-    const A = toXY(p1.latitude, p1.longitude, lat0, lon0);
-    const B = toXY(p2.latitude, p2.longitude, lat0, lon0);
-    const C = toXY(p3.latitude, p3.longitude, lat0, lon0);
-
-    const AC = [C[0] - A[0], C[1] - A[1]];
-    const AB = [B[0] - A[0], B[1] - A[1]];
-
-    const cross = Math.abs(AC[0] * AB[1] - AC[1] * AB[0]);
-    const len = Math.hypot(AC[0], AC[1]);
-
-    return cross / len; // distance in meters
-} 
 
 function gpsHandler(position) {
     const adjusted = {
@@ -331,38 +251,21 @@ function gpsHandler(position) {
             const latDif = pointToLineDist(first.coords, c, last.coords);
             pointAccuracy *= (latDif < 2) ? 1 : latDif / 2;
 
+            // accuracy, dist to avg
+
             if (c.speed != first.coords.speed && c.speed != last.coords.speed) {
                 document.getElementById("fineTune").innerHTML = `midPointacc ${pointAccuracy}`;
             }
 
             pathAccuracy += pointAccuracy;
         }
+        // if beyond here: moving in realtively straight, relatively flat direction
 
-        const firstGyroItx = gyroUpdates.findIndex(obj => obj.timeStamp > (first.timestamp - GPSoffset));
-        const lastGyroItx = gyroUpdates.findIndex(obj => obj.timeStamp > (last.timestamp - GPSoffset)) - 1;
+        // find section of accel within poriton
+        // seperate forward / down vectors
+        // create mounting rotation matrix
+
         
-        if (firstGyroItx < 0 || lastGyroItx < 0) {
-            document.getElementById("status").textContent = "itx went wrong";
-            break mountingBetaGamma;
-        }
-
-        // if beyond here: valid for beta/gamma mount set
-
-        const gyroMountMedian = { ...gyroUpdates[Math.floor(lastGyroItx - firstGyroItx)] }; // gyro is entirely shallow
-
-        const gimbalLockThreshold = 5;
-        if (Math.abs(gyroMountMedian.beta) > 90 - gimbalLockThreshold && Math.abs(gyroMountMedian.beta) < 90 + gimbalLockThreshold) {
-            gyroMountMedian.gamma = 0;
-        }
-
-        const forwardVec = { x: -1, y: 0.1, z: -2 };
-        const qTilt = new Quaternion().setFromEulerIntrinsic( 0, gyroMountMedian.beta, gyroMountMedian.gamma );
-        const forwardVecLeveled = qTilt.getConjugate().applyToVector([forwardVec.x, forwardVec.y, forwardVec.z]);
-        gyroMountMedian.alpha = Math.atan2(forwardVecLeveled[0], -forwardVecLeveled[1]);
-
-        document.getElementById("betaGamma").innerHTML = `
-                ${new Date().toISOString()} <br />
-                ${JSON.stringify(gyroMountMedian, null, 2)} <br />`; 
     }
 }
 
