@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Rotation Rate</title>
+    </head>
+    <body>
+        <main>
+            <h1>Rotaiton Rate Isolation</h1>
+            <canvas id="rotation"></canvas>
+            <button onclick="startMotion();">Pair</button>
+        </main>
+    </body>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+    <script>
+        const ctx = document.getElementById("rotation").getContext("2d");
+        const chart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: Array(300).fill(""),
+                datasets: [
+                    { label: "alpha", borderColor: "red", borderWidth: 1, pointRadius: 0, data: [], fill: false },
+                    { label: "beta", borderColor: "green", borderWidth: 1, pointRadius: 0, data: [], fill: false },
+                    { label: "gamma", borderColor: "blue", borderWidth: 1, pointRadius: 0, data: [], fill: false },
+                ],
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: { y: {
+                    title: {
+                        display: true,
+                        text: "deg/s",
+                    },
+                    beginAtZero: false
+                } },
+            },
+        });
+
+        function startMotion() {
+            if (typeof DeviceMotionEvent.requestPermission === "function") {
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === "granted") {
+                            handleMotion();
+                        }
+                    })
+                    .catch(error => {
+                        console.error(error);
+                    });
+            } else {
+                handleMotion();
+            }
+        }
+        function handleMotion() {
+            if ("DeviceMotionEvent" in window) {
+                window.addEventListener("devicemotion", event => {
+                    
+                    chart.data.datasets[0].data.push(event.rotationRate.alpha);
+                    chart.data.datasets[1].data.push(event.rotationRate.beta);
+                    chart.data.datasets[2].data.push(event.rotationRate.gamma);
+
+                    if (chart.data.datasets[0].data.length > 120) {
+                        chart.data.datasets[0].data.shift();
+                        chart.data.datasets[1].data.shift();
+                        chart.data.datasets[2].data.shift();
+                    }
+                    chart.update();
+
+                });
+            }
+        }
+    </script>
+</html>

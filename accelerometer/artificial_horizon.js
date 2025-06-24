@@ -92,8 +92,10 @@ function handleMotion(event) {
     
     ctx.strokeStyle = "green";
     ctx.fillStyle = "rgb(111, 71, 59)";
-    
-    const horizonOffset = Math.tan(degToRad(pitchDeg)) * (canvas.width / 2);
+
+    const visibleDeg = 90; // 90 default
+    const zoomMult = Math.tan(degToRad(visibleDeg/2)); // sets to fov/2
+    const horizonOffset = Math.tan(degToRad(pitchDeg)) * (canvas.width / 2) / zoomMult;
     // console.log(horizonOffset);
     
     const slope = Math.tan(-degToRad(rollDeg));

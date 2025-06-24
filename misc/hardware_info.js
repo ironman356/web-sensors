@@ -9,6 +9,12 @@ function getAndDisplay() {
     document.getElementById("logicalCores").textContent = navigator.hardwareConcurrency;
     document.getElementById("memory").textContent = navigator.deviceMemory || "null";
     document.getElementById("online").textContent = navigator.onLine;
+
+
+    const orientation = screen.orientation?.type || "";
+    const isPortrait = orientation.startsWith("portrait");
+    document.getElementById("orientaiton").textContent = isPortrait ? "portrait" : "landscape";
+
 }
 
 

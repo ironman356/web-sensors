@@ -17,18 +17,20 @@ const horsepowerEl = document.getElementById("horsepower");
 const tractionCircleEl = document.getElementById("tractionCircle");
 
 
-// startDebugCamera("debugCamera");
+startDebugCamera("debugCamera");
 
 
 const rawGPSarr = [];
 const rawACCarr = [];
 const rawGYROarr = [];
 
+const smoothACCarr = [];
+
 let  accInterval = null;
 let mountingMatrix;
 
 const debugMotionAcc = debugChartInit("debugMotionAcc", ["x", "y", "z"], "m/s");
-const debugMotionRot = debugChartInit("debugMotionRot", ["a", "b", "g"], "deg/s");
+const debugMotionRot = debugChartInit("debugMotionRot", ["x", "y", "z"], "deg/s");
 const debugSpeed = debugChartInit("debugGraphSpeed", ["GPS","CALC"], "Speed *MPH");
 
 const GPSoffset = 500; // make dynamic later? -> /account for variance
@@ -106,18 +108,25 @@ saveButton.addEventListener("click", () => {
 // max typical acc, break, lat = 12, 30, 8
 // max acc street: <100, drag strip <250 
 
-const expX = new ExponentialSmooth({ alpha: .2 });
-const expY = new ExponentialSmooth({ alpha: .2 });
-const expZ = new ExponentialSmooth({ alpha: .2 });
+const expXlin = new ExponentialSmooth({ alpha: .2 });
+const expYlin = new ExponentialSmooth({ alpha: .2 });
+const expZlin = new ExponentialSmooth({ alpha: .2 });
+const expXrot = new ExponentialSmooth({ alpha: .2 });
+const expYrot = new ExponentialSmooth({ alpha: .2 });
+const expZrot = new ExponentialSmooth({ alpha: .2 });
+const expXgrav = new ExponentialSmooth({ alpha: .2 });
+const expYgrav = new ExponentialSmooth({ alpha: .2 });
+const expZgrav = new ExponentialSmooth({ alpha: .2 });
 // const kalmanX = new AdaptiveKalman({ Q: kalQ});
 // const kalmanY = new AdaptiveKalman({ Q: kalQ });
 // const kalmanZ = new AdaptiveKalman({ Q: kalQ });
 
 
-const invertAcc = true;
-
 function accelHandler(event) {
-    const acc = {
+    /**
+     * Think of the accelerometer as a spring-loaded mass measuring the springs length
+     */
+    const rawACC = {
         timestamp: event.timeStamp,         // millis since loaded (not started)
         acceleration: {
             x: event.acceleration.x,
@@ -125,10 +134,10 @@ function accelHandler(event) {
             z: event.acceleration.z,
         },   // m/s^2 along axis xyz
         // accelerationIncludingGravity: event.accelerationIncludingGravity,
-        rotationRate: {     // rotation degrees/sec right-hand-rule, adjusted to axis to prevent confusion with gyro readout
-            x: event.rotationRate.alpha,
-            y: event.rotationRate.beta,
-            z: event.rotationRate.gamma,
+        rotationRate: {     // rotation degrees/sec right-hand-rule
+            x: event.rotationRate.alpha,    // i know all 3 of these look wrong, it is correct when looking at testing
+            y: event.rotationRate.beta,     // or my phone is broken / accel&gyro mounted differently from specifications
+            z: event.rotationRate.gamma,    //
         },
         accelerationIncludingGravity: {
             x: event.accelerationIncludingGravity.x,
@@ -136,9 +145,27 @@ function accelHandler(event) {
             z: event.accelerationIncludingGravity.z,
         }
     };
-
+    // const smoothACC = {
+    //     timestamp: event.timeStamp,
+    //     acceleration: {
+    //         x: expXlin.update(event.acceleration.x),
+    //         y: expYlin.update(event.acceleration.y),
+    //         z: expZlin.update(event.acceleration.z),
+    //     },
+    //     rotationRate: {
+    //         x: expXrot.update(event.rotationRate.beta),
+    //         y: expYrot.update(event.rotationRate.gamma),
+    //         z: expZrot.update(event.rotationRate.alpha),
+    //     },
+    //     accelerationIncludingGravity: {
+    //         x: expXgrav.update(event.accelerationIncludingGravity.x),
+    //         y: expYgrav.update(event.accelerationIncludingGravity.y),
+    //         z: expZgrav.update(event.accelerationIncludingGravity.z),
+    //     }
+    // };
+    
     if (accInterval === null) { // saving seperate from arr to reduce save size
-        // typical ~60hz -> this works for 1-999hz      ios:seconds,android:millis between updates
+        // typical ~60hz -> this works for ~1-999hz      ios:seconds,android:millis between updates
         if (event.interval < 1) {
             accInterval = event.interval * 1000; //ios
         } else {
@@ -146,22 +173,16 @@ function accelHandler(event) {
         }
     };
         
-    // to match internal mental model: acc screen up = +z so on
-    // might be os / device dependent idk
-    if (invertAcc) {
-        acc.acceleration.x = -acc.acceleration.x;
-        acc.acceleration.y = -acc.acceleration.y;
-        acc.acceleration.z = -acc.acceleration.z;
-    }
-    rawACCarr.push(acc);
+    rawACCarr.push(rawACC);
     document.getElementById("ACCtemp").innerText = JSON.stringify(rawACCarr[rawACCarr.length - 1], null, 2);
 
-    debugChartPushData(debugMotionAcc, 0, acc.timestamp, acc.acceleration.x);
-    debugChartPushData(debugMotionAcc, 1, acc.timestamp, acc.acceleration.y);
-    debugChartPushData(debugMotionAcc, 2, acc.timestamp, acc.acceleration.z);
-    debugChartPushData(debugMotionRot, 0, acc.timestamp, acc.rotationRate.z);
-    debugChartPushData(debugMotionRot, 1, acc.timestamp, acc.rotationRate.x);
-    debugChartPushData(debugMotionRot, 2, acc.timestamp, acc.rotationRate.y);
+    debugChartPushData(debugMotionAcc, 0, rawACC.timestamp, rawACC.accelerationIncludingGravity.x);
+    debugChartPushData(debugMotionAcc, 1, rawACC.timestamp, rawACC.accelerationIncludingGravity.y);
+    debugChartPushData(debugMotionAcc, 2, rawACC.timestamp, rawACC.accelerationIncludingGravity.z);
+
+    debugChartPushData(debugMotionRot, 0, rawACC.timestamp, rawACC.rotationRate.x);
+    debugChartPushData(debugMotionRot, 1, rawACC.timestamp, rawACC.rotationRate.y);
+    debugChartPushData(debugMotionRot, 2, rawACC.timestamp, rawACC.rotationRate.z);
 
     // const newSpeed = prevCalcSpeed + (normAcc.y * 2.236936 * event.interval);
     // calcData.push({ x: timestamp, y: newSpeed});
@@ -197,11 +218,13 @@ function gyroHandler(event) {
 
 
 
+let downVec = { x:null, y:null, z:null, gpsQual:null, rotationQual:null };
+let forwardVec = { x:null, y:null, z:null, gDif:null, rotationQual:null, pointAmt:0 };
 
 
 function gpsHandler(position) {
     const adjusted = {
-        timestamp: position.timestamp - startingTimeStamp,      // adjusted from epoch to relative
+        timestamp: position.timestamp - startingTimeStamp,      // adjusted from epoch to relative -> so only need to account for 500ms offset
         coords: {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -216,58 +239,192 @@ function gpsHandler(position) {
 
     document.getElementById("GPStemp").innerText = JSON.stringify(adjusted, null, 2);
 
-    document.getElementById("betaGamma").innerHTML = "bg";
-    document.getElementById("status").innerHTML = "ste";
-
-    mountingBetaGamma: {
+    mounting: {
         if (rawGPSarr.length < 3) {
-            break mountingBetaGamma;
+            document.getElementById("fineTune").textContent = `length ${rawGPSarr.length}`;
+            break mounting;
         }
-        const portion = rawGPSarr.slice(-3); // TODO - dynamic later for better accuracy
-            // every new update:
-            //      (spd < threshold) | (acc < threshold) | (altacc < threshold): tail = cur
-            //      alt ~= prev, adjust tail to alt match
-            //      not straight -> adjust tail
-            // if (notlongenough) pass
-        const first = portion[0];
-        const last = portion[portion.length - 1];
-
-        const pathAccuracy = 1;
+        const gpsSubSec = rawGPSarr.slice(-3); // TODO - dynamic later for better accuracy
+            // TODO? -> continous 2pointer track straight sections
+            
+        const gpsFirst = gpsSubSec[0];
+        const gpsLast = gpsSubSec[gpsSubSec.length - 1];
         
-        for (const update of portion) {
-
+        let pathAccuracy = 1;
+    
+        for (const update of gpsSubSec) {
+            
             const c = update.coords;
-            const pointAccuracy = 1;            
-
-            if (c.speed < 5 || c.speed === null) { // m/s spd thres
-                document.getElementById("status").textContent = `not enough spd ${c.speed}`;
-                break mountingBetaGamma;
+            let pointAccuracy = 1;
+            
+            const spdThres = 5;
+            // if (c.speed === null || c.speed < spdThres) {
+            //         pointAccuracy *= 1000;
+            //         break mounting;
+            //     }
+            pointAccuracy *= Math.max(1, c.accuracy / 2);
+            pointAccuracy *= Math.max(1, c.altitudeAccuracy / 3);
+            const altDif = Math.abs(gpsFirst.coords.altitude - c.altitude);
+            pointAccuracy *= Math.max(1, altDif);
+            const latDif = pointToLineDist(gpsFirst.coords, c, gpsLast.coords); // will be 0 on 1st/last rn
+            if (c.speed !== null && c.speed > spdThres) {
+                pointAccuracy *= Math.max(1, latDif / (c.speed / spdThres));
+            } else {
+                pointAccuracy *= 1000
             }
-
-            pointAccuracy *= (c.accuracy < 3) ? 1 : c.accuracy / 3;
-            pointAccuracy *= (c.altitudeAccuracy < 4) ? 1 : c.altitudeAccuracy / 4;
-            const altDif = Math.abs(first.coords.altitude - c.altitude);
-            pointAccuracy *= (altDif < 1) ? 1 : altDif;
-            const latDif = pointToLineDist(first.coords, c, last.coords);
-            pointAccuracy *= (latDif < 2) ? 1 : latDif / 2;
-
+            
             // accuracy, dist to avg
-
-            if (c.speed != first.coords.speed && c.speed != last.coords.speed) {
-                document.getElementById("fineTune").innerHTML = `midPointacc ${pointAccuracy}`;
+            // DEBUG ONLY-> remove when portion adjusted
+            if (update.timestamp != gpsFirst.timestamp && update.timestamp != gpsLast.timestamp) {
+                document.getElementById("fineTune").textContent = `midPointacc ${pointAccuracy}`;
             }
 
             pathAccuracy += pointAccuracy;
         }
-        // if beyond here: moving in realtively straight, relatively flat direction
-
-        // find section of accel within poriton
-        // seperate forward / down vectors
-        // create mounting rotation matrix
-
+        pathAccuracy /= gpsSubSec.length
+        // if beyond here: moving realtively straight, relatively flat
+        document.getElementById("fineTune").textContent += `\npath acc ${pathAccuracy}`;
+        // set down vector
+        const firstAccITX = rawACCarr.findIndex(obj => obj.timestamp >= gpsFirst.timestamp - GPSoffset);
+        const lastAccITX = rawACCarr.findIndex(obj => obj.timestamp >= gpsLast.timestamp - GPSoffset);
         
+        if ( (lastAccITX - firstAccITX) < 30) { // should be ~60x subsec.length
+            break mounting;
+        }
+        
+
+        let potentialDown = { x:0, y:0, z:0, gpsQual:pathAccuracy, rotationQual:0 };
+        for ( let i = firstAccITX; i <= lastAccITX; i++ ) {
+            const grav = getGravity(rawACCarr[i]);
+            addVectors(potentialDown, grav);
+            potentialDown.rotationQual += xyzMagnitude(rawACCarr[i].rotationRate);
+        }
+        potentialDown.x /= lastAccITX-firstAccITX;
+        potentialDown.y /= lastAccITX-firstAccITX;
+        potentialDown.z /= lastAccITX-firstAccITX;
+        potentialDown.rotationQual /= lastAccITX-firstAccITX;
+        if (downVec.gpsQual === null) {
+            downVec = potentialDown;
+        } else {
+            document.getElementById("fineTune").textContent += `\nPotBal: ${potentialDown.gpsQual + potentialDown.rotationQual*10}`;
+            document.getElementById("fineTune").textContent += `\nCurBal: ${downVec.gpsQual + downVec.rotationQual*10}`;
+            if (potentialDown.gpsQual + potentialDown.rotationQual*10 < downVec.gpsQual + downVec.rotationQual*10) {
+                downVec = potentialDown;
+            }
+        }
+        document.getElementById("fineTune").textContent += `\nDownVec ${JSON.stringify(downVec, null, 2)}`;
+        
+        
+        const forwardVecAccThres = 2;
+        const forwardVecMinPoints = 20;
+        
+        
+        // 2pointer find periods of continuious acceleration
+        let l = 0, r = 0;
+        while (l < rawACCarr.length) {
+            if (xyzMagnitude(rawACCarr[l].acceleration) > forwardVecAccThres) {
+                r = l;
+                while (xyzMagnitude(rawACCarr[r].acceleration) > forwardVecAccThres && r < rawACCarr.length) {
+                    r++;
+                }
+                // here [l to r] meets acc thres
+                if ( r-l < forwardVecMinPoints) {
+                    l=r;
+                    continue;
+                }
+                let potentialForward = { x:0, y:0, z:0, gDif:0, rotationQual:0, pointAmt:r-l };
+                for (let k = l; k < r; k++) {
+                    addVectors(potentialForward, rawACCarr[k].acceleration);
+                    potentialForward.gDif += xyzDistance(downVec, getGravity(rawACCarr[k]));
+                    potentialForward.rotationQual += xyzMagnitude(rawACCarr[k].rotationRate);
+                }
+                potentialForward.x /= r-l;
+                potentialForward.y /= r-l;
+                potentialForward.z /= r-l;
+                potentialForward.gDif /= r-l;
+                potentialForward.rotationQual /= r-l;
+                if (forwardVec.rotationQual === null) {
+                    forwardVec = potentialForward;
+                    l=r;
+                    continue;
+                }
+
+                // seeing if potential is better than current
+                // adjust this to change balance / priority of gDif and rotaitonQual
+                function vecBalance(v, weights = { gDif: 100, rotationQual: 1, pointAmt: 1 }) {
+                    if (v.gDif == null || v.rotationQual == null || v.pointAmt == null) return Infinity;
+                    return (
+                        v.gDif * weights.gDif +
+                        v.rotationQual * weights.rotationQual +
+                        v.pointAmt * weights.pointAmt
+                    );
+                }
+
+                // document.getElementById("fineTune").textContent += `\nfor pot bal: ${vecBalance(potentialForward)}`;
+                // document.getElementById("fineTune").textContent += `\nfor cur bal: ${vecBalance(forwardVec)}`;
+                if (vecBalance(potentialForward) < vecBalance(forwardVec)) {
+                    forwardVec = potentialForward;
+                }
+                l = r;
+            } else {
+                l++;
+            }
+        }
+        document.getElementById("fineTune").textContent += `\nForwardVec ${JSON.stringify(forwardVec, null, 2)}`;
+
+
     }
 }
+/**
+ * isolate gravity vec via acceleration w/gravity - linear acceleration
+ * @param {*} vec vector with accelerationIncludingGravity && acceleration properties
+ * @returns vector with only xyz properties being gravity
+ */
+function getGravity(vec) {
+    return {
+        x: vec.accelerationIncludingGravity.x - vec.acceleration.x,
+        y: vec.accelerationIncludingGravity.y - vec.acceleration.y,
+        z: vec.accelerationIncludingGravity.z - vec.acceleration.z,
+    };
+}
+/**
+ * Adds vec2 to vec1 preserving vec1's other properties
+ * @param {*} vec1 
+ * @param {*} vec2 
+ * @returns 
+ */
+function addVectors(vec1, vec2) {
+    vec1.x += vec2.x;
+    vec1.y += vec2.y;
+    vec1.z += vec2.z;
+    return vec1;
+}
+/**
+ * gets magnitude of vector based on its xyz peroperties
+ * @param {*} vec 
+ * @returns number
+ */
+function xyzMagnitude(vec) {
+    const net = vec.x**2 + vec.y**2 + vec.z**2;
+    return Math.sqrt(net);
+}
+/**
+ * Distance between 2 objects based on xyz peroperties of passed object
+ * @param {*} vec1 
+ * @param {*} vec2 
+ */
+function xyzDistance(vec1, vec2) {
+    let result = 0;
+    result += (vec1.x - vec2.x)**2;
+    result += (vec1.y - vec2.y)**2;
+    result += (vec1.z - vec2.z)**2;
+    return Math.sqrt(result);
+}
+
+
+
+
+
 
 function onGPSError(error) {
     alert(`GPS error: ${error.message}`);

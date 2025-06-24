@@ -1,3 +1,34 @@
+function createChart(canvasId, label) {
+    const ctx = document.getElementById(canvasId).getContext("2d");
+    return new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: Array(300).fill(""),
+            datasets: [
+                { label: "X", borderColor: "red", borderWidth: 1, pointRadius: 0, data: [], fill: false },
+                { label: "Y", borderColor: "green", borderWidth: 1, pointRadius: 0, data: [], fill: false },
+                { label: "Z", borderColor: "blue", borderWidth: 1, pointRadius: 0, data: [], fill: false },
+                { label: "Total", borderColor: "black", borderWidth: 1, pointRadius: 0, data: [], fill: false },
+            ],
+        },
+        options: {
+            responsive: true,
+            animation: false,
+            scales: { y: {
+                title: {
+                    display: true,
+                    text: label,
+                },
+                beginAtZero: false
+            } },
+        },
+    });
+}
+
+const linearChart = createChart("linearChart", "Linear");
+const gravityChart = createChart("gravityChart", "W/Gravity");
+const differenceChart = createChart("differenceChart", "Grav - Linear");
+
 function startAccelerometer(){
     if (typeof DeviceMotionEvent.requestPermission === "function") {
         DeviceMotionEvent.requestPermission()
@@ -35,7 +66,40 @@ function enableAccelerometer() {
             document.getElementById("xLinearRaw").textContent = accLinear.x ? accLinear.x.toFixed(3) : "null";
             document.getElementById("yLinearRaw").textContent = accLinear.y ? accLinear.y.toFixed(3) : "null";
             document.getElementById("zLinearRaw").textContent = accLinear.z ? accLinear.z.toFixed(3) : "null";
+           
+            linearChart.data.datasets[0].data.push(accLinear.x);
+            linearChart.data.datasets[1].data.push(accLinear.y);
+            linearChart.data.datasets[2].data.push(accLinear.z);
+            linearChart.data.datasets[3].data.push(Math.sqrt(accLinear.x**2 + accLinear.y**2 + accLinear.z**2));
             
+            gravityChart.data.datasets[0].data.push(accGravity.x);
+            gravityChart.data.datasets[1].data.push(accGravity.y);
+            gravityChart.data.datasets[2].data.push(accGravity.z);
+            gravityChart.data.datasets[3].data.push(Math.sqrt(accGravity.x**2 + accGravity.y**2 + accGravity.z**2));
+            
+            differenceChart.data.datasets[0].data.push(accGravity.x - accLinear.x);
+            differenceChart.data.datasets[1].data.push(accGravity.y - accLinear.y);
+            differenceChart.data.datasets[2].data.push(accGravity.z - accLinear.z);
+            differenceChart.data.datasets[3].data.push(Math.sqrt((accGravity.x - accLinear.x)**2 + (accGravity.y - accLinear.y)**2 + (accGravity.z - accLinear.z)**2));
+
+            if (linearChart.data.datasets[0].data.length > 300) {
+                linearChart.data.datasets[0].data.shift();
+                linearChart.data.datasets[1].data.shift();
+                linearChart.data.datasets[2].data.shift();
+                linearChart.data.datasets[3].data.shift();
+                gravityChart.data.datasets[0].data.shift();
+                gravityChart.data.datasets[1].data.shift();
+                gravityChart.data.datasets[2].data.shift();
+                gravityChart.data.datasets[3].data.shift();
+                differenceChart.data.datasets[0].data.shift();
+                differenceChart.data.datasets[1].data.shift();
+                differenceChart.data.datasets[2].data.shift();
+                differenceChart.data.datasets[3].data.shift();
+            }
+            linearChart.update();
+            gravityChart.update();
+            differenceChart.update();
+
             const intervalTime = event.interval;
             document.getElementById("intervalLen").textContent = intervalTime ? (intervalTime*1000).toFixed(2) : "null";
             const intervalHZ = (1 / intervalTime);
@@ -105,3 +169,5 @@ function enableAccelerometer() {
         document.getElementById("status").textContent = "Accelerometer not supported";
     }
 }
+
+
