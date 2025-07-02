@@ -1,6 +1,7 @@
+// @ts-check
 import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, removeGPS } from "./pairing.js";
 import { debugChartInit, debugChartSetData, debugChartPushData, startDebugCamera } from "./debug.js";
-import { pointToLineDist } from "./math.js";
+import { pointToLineDist, getGravity, addVectors, xyzMagnitude, xyzDistance, xyzToMatrix, matrixToXYZ, makeMountMatrix, matrixTranspose, applyRotationMatrix, radToDeg } from "./math.js";
 import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
 
 // document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
@@ -19,6 +20,8 @@ const tractionCircleEl = document.getElementById("tractionCircle");
 
 startDebugCamera("debugCamera");
 
+let calcSpeed = 0;
+const meterPerSecToMilePerHourC = 2.236936;
 
 const rawGPSarr = [];
 const rawACCarr = [];
@@ -27,7 +30,16 @@ const rawGYROarr = [];
 const smoothACCarr = [];
 
 let  accInterval = null;
-let mountingMatrix;
+let mountingMatrix = null;
+
+/** @typedef {{ x:number, y:number, z:number, gpsQual:number|null, rotationQual:number, timestampPoints:number[]|null, pointAmt:number|null }} downVec */
+/** @type {downVec} */
+let downVec = { x:0, y:-9.8, z:0, gpsQual:null, rotationQual:Number.MAX_SAFE_INTEGER, timestampPoints:null, pointAmt:null};
+
+/**@typedef {{ x:number|null, y:number|null, z:number|null, gDif:number|null, rotationQual:number, timestampPoints:number[]|null, pointAmt:number|null }} forwardVec*/
+/** @type {forwardVec} */
+let forwardVec = { x:null, y:null, z:null, gDif:null, rotationQual:Number.MAX_SAFE_INTEGER, timestampPoints:null, pointAmt:0};
+
 
 const debugMotionAcc = debugChartInit("debugMotionAcc", ["x", "y", "z"], "m/s");
 const debugMotionRot = debugChartInit("debugMotionRot", ["x", "y", "z"], "deg/s");
@@ -176,20 +188,44 @@ function accelHandler(event) {
     rawACCarr.push(rawACC);
     document.getElementById("ACCtemp").innerText = JSON.stringify(rawACCarr[rawACCarr.length - 1], null, 2);
 
-    debugChartPushData(debugMotionAcc, 0, rawACC.timestamp, rawACC.accelerationIncludingGravity.x);
-    debugChartPushData(debugMotionAcc, 1, rawACC.timestamp, rawACC.accelerationIncludingGravity.y);
-    debugChartPushData(debugMotionAcc, 2, rawACC.timestamp, rawACC.accelerationIncludingGravity.z);
 
-    debugChartPushData(debugMotionRot, 0, rawACC.timestamp, rawACC.rotationRate.x);
-    debugChartPushData(debugMotionRot, 1, rawACC.timestamp, rawACC.rotationRate.y);
-    debugChartPushData(debugMotionRot, 2, rawACC.timestamp, rawACC.rotationRate.z);
+    if (mountingMatrix !== null) {
+        const grav = getGravity(rawACC);
+        const grav_deviation = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(grav));
+        const curPitch = -radToDeg(Math.atan2(grav_deviation[1], grav_deviation[2]));
+        const curRoll = -radToDeg(Math.atan2(grav_deviation[0], grav_deviation[2]));
+        debugChartPushData(debugMotionRot, 0, rawACC.timestamp, curPitch);
+        debugChartPushData(debugMotionRot, 1, rawACC.timestamp, curRoll);
+        debugChartPushData(debugMotionRot, 2, rawACC.timestamp, 0);
 
-    // const newSpeed = prevCalcSpeed + (normAcc.y * 2.236936 * event.interval);
-    // calcData.push({ x: timestamp, y: newSpeed});
-    // if (calcData.length > 500) calcData.shift();
-    // debugChartSetData(debugSpeedChart, 1, calcData);
-    // calcSpeedEl.textContent = newSpeed.toFixed(2);
+
+        const vehicleAccMat = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(rawACC.acceleration));
+        // document.getElementById("fineTune").textContent = `crash?  ${JSON.stringify(vehicleAccMat, null, 2)}`;
+
+        const vehicleAcc = matrixToXYZ(vehicleAccMat);
+        debugChartPushData(debugMotionAcc, 0, rawACC.timestamp, vehicleAcc.x);
+        debugChartPushData(debugMotionAcc, 1, rawACC.timestamp, vehicleAcc.y);
+        debugChartPushData(debugMotionAcc, 2, rawACC.timestamp, vehicleAcc.z);
+        
+        calcSpeed = calcSpeed + ((vehicleAcc.y / accInterval) * meterPerSecToMilePerHourC);
+        debugChartPushData(debugSpeed, 1, rawACC.timestamp, calcSpeed);
+        
+
+
+    } else {
+        debugChartPushData(debugMotionAcc, 0, rawACC.timestamp, rawACC.accelerationIncludingGravity.x);
+        debugChartPushData(debugMotionAcc, 1, rawACC.timestamp, rawACC.accelerationIncludingGravity.y);
+        debugChartPushData(debugMotionAcc, 2, rawACC.timestamp, rawACC.accelerationIncludingGravity.z);
+        debugChartPushData(debugMotionRot, 0, rawACC.timestamp, rawACC.rotationRate.x);
+        debugChartPushData(debugMotionRot, 1, rawACC.timestamp, rawACC.rotationRate.y);
+        debugChartPushData(debugMotionRot, 2, rawACC.timestamp, rawACC.rotationRate.z);
+    }
+
+
 }
+const test = applyRotationMatrix(matrixTranspose([[-0.9,-0.2,0.0,],[-0.01,0.2,-0.97],[0.02,-0.97,-0.2]]), [0,-9.8,1]);
+console.log(Math.atan2(test[1],test[2]));
+console.log(Math.atan2(test[0],test[2]));
 
 
 function gyroHandler(event) {
@@ -218,8 +254,6 @@ function gyroHandler(event) {
 
 
 
-let downVec = { x:null, y:null, z:null, gpsQual:null, rotationQual:null };
-let forwardVec = { x:null, y:null, z:null, gDif:null, rotationQual:null, pointAmt:0 };
 
 
 function gpsHandler(position) {
@@ -235,7 +269,13 @@ function gpsHandler(position) {
             speed: position.coords.speed            // m/s
         }
     };
+
     rawGPSarr.push(adjusted);
+
+    if (adjusted.coords.speed !== null) {
+        calcSpeed = adjusted.coords.speed * meterPerSecToMilePerHourC;
+        debugChartPushData(debugSpeed, 0, adjusted.timestamp, adjusted.coords.speed * meterPerSecToMilePerHourC);
+    }
 
     document.getElementById("GPStemp").innerText = JSON.stringify(adjusted, null, 2);
 
@@ -283,20 +323,22 @@ function gpsHandler(position) {
         }
         pathAccuracy /= gpsSubSec.length
         // if beyond here: moving realtively straight, relatively flat
-        document.getElementById("fineTune").textContent += `\npath acc ${pathAccuracy}`;
+        document.getElementById("fineTune").textContent += `\npath acc ${pathAccuracy}`; 
         // set down vector
         const firstAccITX = rawACCarr.findIndex(obj => obj.timestamp >= gpsFirst.timestamp - GPSoffset);
         const lastAccITX = rawACCarr.findIndex(obj => obj.timestamp >= gpsLast.timestamp - GPSoffset);
         
-        if ( (lastAccITX - firstAccITX) < 30) { // should be ~60x subsec.length
+        if ( (lastAccITX - firstAccITX) < 30) { // should be ~60x (subsec.length-1)
             break mounting;
         }
         
+        /** @type {downVec} */
+        let potentialDown = { x:0, y:0, z:0, gpsQual:pathAccuracy, rotationQual:0, timestampPoints:[gpsFirst.timestamp, gpsLast.timestamp], pointAmt:1 }; // point amt not setup b/c gps still static 3 point
+        
 
-        let potentialDown = { x:0, y:0, z:0, gpsQual:pathAccuracy, rotationQual:0 };
         for ( let i = firstAccITX; i <= lastAccITX; i++ ) {
             const grav = getGravity(rawACCarr[i]);
-            addVectors(potentialDown, grav);
+            addVectors(potentialDown, grav); // potentialdown += gravity (xyz)
             potentialDown.rotationQual += xyzMagnitude(rawACCarr[i].rotationRate);
         }
         potentialDown.x /= lastAccITX-firstAccITX;
@@ -306,11 +348,32 @@ function gpsHandler(position) {
         if (downVec.gpsQual === null) {
             downVec = potentialDown;
         } else {
-            document.getElementById("fineTune").textContent += `\nPotBal: ${potentialDown.gpsQual + potentialDown.rotationQual*10}`;
-            document.getElementById("fineTune").textContent += `\nCurBal: ${downVec.gpsQual + downVec.rotationQual*10}`;
-            if (potentialDown.gpsQual + potentialDown.rotationQual*10 < downVec.gpsQual + downVec.rotationQual*10) {
+            
+            // check if down is flat out better
+            const downVecWeights = { gpsQual:1, rotationQual:1, pointAmt:.1 };
+
+            const potBal = propertyBalance(potentialDown, downVecWeights) + potentialDown.timestampPoints[potentialDown.timestampPoints.length-1]/100000;
+            const curBal = propertyBalance(downVec, downVecWeights) + downVec.timestampPoints[downVec.timestampPoints.length-1]/100000;
+
+            if (potBal === null || curBal === null) {
+                //something went very very wrong
+                window.alert("Null balance - this shouldn't be possible");
+            } else if (potBal < curBal) {
                 downVec = potentialDown;
             }
+            document.getElementById("fineTune").textContent += `\nPotBal: ${potBal}`;
+            document.getElementById("fineTune").textContent += `\nCurBal: ${curBal}`;
+            document.getElementById("fineTune").textContent += `\ndown pot dist ${xyzDistance(potentialDown, downVec)}`;
+
+
+            // high qual but not same == mount changed / moved
+            // at small angle differences 1deg dif ~0.175 dist - not linear completely but at small angle differences the distances scale effectively linearly
+            if ( (propertyBalance(potentialDown, downVecWeights) < propertyBalance(downVec, downVecWeights) * 1.3) && (xyzDistance(potentialDown, downVec) > .175*5 ) ) {
+                downVec = potentialDown;
+                document.getElementById("fineTune").textContent += `\nDownvec Changed -|-|-|-|-`;
+
+            }
+
         }
         document.getElementById("fineTune").textContent += `\nDownVec ${JSON.stringify(downVec, null, 2)}`;
         
@@ -332,7 +395,7 @@ function gpsHandler(position) {
                     l=r;
                     continue;
                 }
-                let potentialForward = { x:0, y:0, z:0, gDif:0, rotationQual:0, pointAmt:r-l };
+                let potentialForward = { x:0, y:0, z:0, gDif:0, rotationQual:0, timestampPoints:[gpsFirst.timestamp, gpsLast.timestamp], pointAmt:r-l };
                 for (let k = l; k < r; k++) {
                     addVectors(potentialForward, rawACCarr[k].acceleration);
                     potentialForward.gDif += xyzDistance(downVec, getGravity(rawACCarr[k]));
@@ -343,26 +406,14 @@ function gpsHandler(position) {
                 potentialForward.z /= r-l;
                 potentialForward.gDif /= r-l;
                 potentialForward.rotationQual /= r-l;
-                if (forwardVec.rotationQual === null) {
+                if (forwardVec.x === null) {
                     forwardVec = potentialForward;
                     l=r;
                     continue;
                 }
 
-                // seeing if potential is better than current
-                // adjust this to change balance / priority of gDif and rotaitonQual
-                function vecBalance(v, weights = { gDif: 100, rotationQual: 1, pointAmt: 1 }) {
-                    if (v.gDif == null || v.rotationQual == null || v.pointAmt == null) return Infinity;
-                    return (
-                        v.gDif * weights.gDif +
-                        v.rotationQual * weights.rotationQual +
-                        v.pointAmt * weights.pointAmt
-                    );
-                }
-
-                // document.getElementById("fineTune").textContent += `\nfor pot bal: ${vecBalance(potentialForward)}`;
-                // document.getElementById("fineTune").textContent += `\nfor cur bal: ${vecBalance(forwardVec)}`;
-                if (vecBalance(potentialForward) < vecBalance(forwardVec)) {
+                const forwardVecWeights = { gDif:1, rotationQual:1, pointAmt:1 };
+                if (propertyBalance(potentialForward, forwardVecWeights) < propertyBalance(forwardVec, forwardVecWeights)) {
                     forwardVec = potentialForward;
                 }
                 l = r;
@@ -372,57 +423,27 @@ function gpsHandler(position) {
         }
         document.getElementById("fineTune").textContent += `\nForwardVec ${JSON.stringify(forwardVec, null, 2)}`;
 
+        if (forwardVec.x !== null && downVec.x !== null) {
+            mountingMatrix = makeMountMatrix(downVec, forwardVec);
+            document.getElementById("fineTune").textContent += `\n matrix made`;
+            // document.getElementById("fineTune").textContent += `\nMounting Matrix ${JSON.stringify(mountingMatrix, null, 2)}`;
+        }
 
     }
 }
-/**
- * isolate gravity vec via acceleration w/gravity - linear acceleration
- * @param {*} vec vector with accelerationIncludingGravity && acceleration properties
- * @returns vector with only xyz properties being gravity
- */
-function getGravity(vec) {
-    return {
-        x: vec.accelerationIncludingGravity.x - vec.acceleration.x,
-        y: vec.accelerationIncludingGravity.y - vec.acceleration.y,
-        z: vec.accelerationIncludingGravity.z - vec.acceleration.z,
-    };
-}
-/**
- * Adds vec2 to vec1 preserving vec1's other properties
- * @param {*} vec1 
- * @param {*} vec2 
- * @returns 
- */
-function addVectors(vec1, vec2) {
-    vec1.x += vec2.x;
-    vec1.y += vec2.y;
-    vec1.z += vec2.z;
-    return vec1;
-}
-/**
- * gets magnitude of vector based on its xyz peroperties
- * @param {*} vec 
- * @returns number
- */
-function xyzMagnitude(vec) {
-    const net = vec.x**2 + vec.y**2 + vec.z**2;
-    return Math.sqrt(net);
-}
-/**
- * Distance between 2 objects based on xyz peroperties of passed object
- * @param {*} vec1 
- * @param {*} vec2 
- */
-function xyzDistance(vec1, vec2) {
-    let result = 0;
-    result += (vec1.x - vec2.x)**2;
-    result += (vec1.y - vec2.y)**2;
-    result += (vec1.z - vec2.z)**2;
-    return Math.sqrt(result);
-}
 
 
-
+function propertyBalance(obj, weights = {} ) {
+    let total = 0;
+    for (let key in weights) {
+        if ( !(key in obj) ) {
+            window.alert(`key "${key}" missing - propertyBalance`)
+            return null;
+        }
+        total += obj[key] * weights[key];
+    }
+    return total;
+}
 
 
 
