@@ -185,16 +185,16 @@ export function matrixToXYZ(arr) {
 }
 export function makeMountMatrix(down, forward) {
     // right hand rule z up 
-    const z = matrixNormalize([down.x, down.y, down.z]);
+    const z = matrixNormalize([-down.x, -down.y, -down.z]); // pos z = up
     const y = matrixNormalize([forward.x, forward.y, forward.z]); 
     const x = matrixNormalize(matrixCross(y, z));
     const y_corrected = matrixCross(z, x);  // recomputed to ensure orthogonal
     // x will be orthogonal, y_corrected is on the same plane as yz just also orthogonal to z & x
 
     return [
-        [x[0], y_corrected[0], z[0]],
-        [x[1], y_corrected[1], z[1]],
-        [x[2], y_corrected[2], z[2]],
+        [x[0], y_corrected[0], -z[0]],
+        [x[1], y_corrected[1], -z[1]],
+        [x[2], y_corrected[2], -z[2]],
     ];
 }
 export function matrixNormalize(vec) {

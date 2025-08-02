@@ -91,8 +91,11 @@ export async function startDebugCamera(videoElId) {
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { deviceId: { exact: target.deviceId } }
+            video: { deviceId: { exact: target.deviceId }, width: { ideal: 200*3 }, height: { ideal: 380*3 }, frameRate: { ideal: 60 } } // sized for portrait mount & phone size
         });
+
+        const info = JSON.stringify(stream.getVideoTracks()[0].getSettings(), null, 2)
+        document.getElementById("fineTune").textContent = `vidSettings ${info}`;
 
         document.getElementById(videoElId).srcObject = stream;
     } catch (err) {

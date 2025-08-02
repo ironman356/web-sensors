@@ -1,5 +1,7 @@
 
 function getAndDisplay() {
+    // screen size != visible area - see bluebox
+    // across multiple screens it will only give display w/majority of window
     document.getElementById("screenWidth").textContent = window.screen.width;
     document.getElementById("screenHeight").textContent = window.screen.height;
     document.getElementById("screenColorDepth").textContent = window.screen.colorDepth;
@@ -15,6 +17,9 @@ function getAndDisplay() {
     const isPortrait = orientation.startsWith("portrait");
     document.getElementById("orientaiton").textContent = isPortrait ? "portrait" : "landscape";
 
+    const boxSize = document.documentElement.getBoundingClientRect();
+    document.getElementById("blueBoxArea").textContent = `${boxSize.width}x${boxSize.height}`;
+    console.log(`${screen.orientation?.type}`);
 }
 
 

@@ -7,6 +7,7 @@ import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
 // document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 // document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
 
+
 const pairButton = document.getElementById("pairButton");
 const settingsButton = document.getElementById("settingsMenuButton");
 const saveButton = document.getElementById("saveRecordedButton");
@@ -23,23 +24,34 @@ startDebugCamera("debugCamera");
 let calcSpeed = 0;
 const meterPerSecToMilePerHourC = 2.236936;
 
+const smoothingOptions = {
+    "exp": ExponentialSmooth
+};
+let smoothingSelection = "exp";
+let smoothingSelectionVars = [ {alpha:0.1} ];
+
+
 const rawGPSarr = [];
 const rawACCarr = [];
 const rawGYROarr = [];
 
 const smoothACCarr = [];
+const calcSpdArr = [];
 
 let  accInterval = null;
 let mountingMatrix = null;
 
 /** @typedef {{ x:number, y:number, z:number, gpsQual:number|null, rotationQual:number, timestampPoints:number[]|null, pointAmt:number|null }} downVec */
 /** @type {downVec} */
-let downVec = { x:0, y:-9.8, z:0, gpsQual:null, rotationQual:Number.MAX_SAFE_INTEGER, timestampPoints:null, pointAmt:null};
+// let downVec = { x:0, y:-9.8, z:0, gpsQual:null, rotationQual:Number.MAX_SAFE_INTEGER, timestampPoints:null, pointAmt:null};
+let downVec = { x:0, y:-9.8, z:0, gpsQual:10000, rotationQual:1000, timestampPoints:null, pointAmt:null};
 
-/**@typedef {{ x:number|null, y:number|null, z:number|null, gDif:number|null, rotationQual:number, timestampPoints:number[]|null, pointAmt:number|null }} forwardVec*/
+/**@typedef {{ x:number|null, y:number|null, z:number|null, gDif:number|null, rotationQual:number, timestampPoints:number[]|null, pointAmt:number|null, gpsSpdInc:number }} forwardVec*/
 /** @type {forwardVec} */
-let forwardVec = { x:null, y:null, z:null, gDif:null, rotationQual:Number.MAX_SAFE_INTEGER, timestampPoints:null, pointAmt:0};
+// let forwardVec = { x:null, y:null, z:null, gDif:null, rotationQual:Number.MAX_SAFE_INTEGER, timestampPoints:null, pointAmt:0};
+let forwardVec = { x:0, y:0, z:-3, gDif:20, rotationQual:1000, timestampPoints:null, pointAmt:1, gpsSpdInc: 0};
 
+mountingMatrix = makeMountMatrix(downVec, forwardVec);
 
 const debugMotionAcc = debugChartInit("debugMotionAcc", ["x", "y", "z"], "m/s");
 const debugMotionRot = debugChartInit("debugMotionRot", ["x", "y", "z"], "deg/s");
@@ -56,7 +68,7 @@ pairButton.addEventListener("click", () => {
     if (pairButton.textContent == "Pair") {
         geoWatchId = pairGPS(gpsHandler, onGPSError);
         pairMotion(accelHandler);
-        pairOrientation(gyroHandler);        
+        // pairOrientation(gyroHandler);        
         pairButton.textContent = "Un-Pair";
     }
 
@@ -65,7 +77,7 @@ pairButton.addEventListener("click", () => {
 
         geoWatchId = removeGPS(geoWatchId);
         removeMotion(accelHandler);
-        removeOrientation(gyroHandler);
+        // removeOrientation(gyroHandler);
         pairButton.textContent = "Pair";
     }
 });
@@ -116,28 +128,42 @@ saveButton.addEventListener("click", () => {
 
 
 
-// const kalQ = (10 * 1 / 60) ** 2; // expected max accel ~10 m/s^2 over 1 update
-// max typical acc, break, lat = 12, 30, 8
-// max acc street: <100, drag strip <250 
 
-const expXlin = new ExponentialSmooth({ alpha: .2 });
-const expYlin = new ExponentialSmooth({ alpha: .2 });
-const expZlin = new ExponentialSmooth({ alpha: .2 });
-const expXrot = new ExponentialSmooth({ alpha: .2 });
-const expYrot = new ExponentialSmooth({ alpha: .2 });
-const expZrot = new ExponentialSmooth({ alpha: .2 });
-const expXgrav = new ExponentialSmooth({ alpha: .2 });
-const expYgrav = new ExponentialSmooth({ alpha: .2 });
-const expZgrav = new ExponentialSmooth({ alpha: .2 });
-// const kalmanX = new AdaptiveKalman({ Q: kalQ});
-// const kalmanY = new AdaptiveKalman({ Q: kalQ });
-// const kalmanZ = new AdaptiveKalman({ Q: kalQ });
+const smoothACCmethod = {
+    timestamp: null,
+    acceleration: {
+        x: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+        y: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+        z: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+    },
+    rotationRate: {
+        x: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+        y: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+        z: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+    },
+    accelerationIncludingGravity: {
+        x: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+        y: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+        z: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
+    }
+};
 
 
 function accelHandler(event) {
     /**
      * Think of the accelerometer as a spring-loaded mass measuring the springs length
      */
+
+
+    if (accInterval === null) { // saving seperate from arr to reduce save size
+        // typical ~60hz -> this works for ~1-999hz      ios:seconds,android:millis between updates
+        if (event.interval < 1) {
+            accInterval = event.interval * 1000; //ios
+        } else {
+            accInterval = event.interval; //not ios
+        }
+    };
+
     const rawACC = {
         timestamp: event.timeStamp,         // millis since loaded (not started)
         acceleration: {
@@ -157,100 +183,119 @@ function accelHandler(event) {
             z: event.accelerationIncludingGravity.z,
         }
     };
-    // const smoothACC = {
-    //     timestamp: event.timeStamp,
-    //     acceleration: {
-    //         x: expXlin.update(event.acceleration.x),
-    //         y: expYlin.update(event.acceleration.y),
-    //         z: expZlin.update(event.acceleration.z),
-    //     },
-    //     rotationRate: {
-    //         x: expXrot.update(event.rotationRate.beta),
-    //         y: expYrot.update(event.rotationRate.gamma),
-    //         z: expZrot.update(event.rotationRate.alpha),
-    //     },
-    //     accelerationIncludingGravity: {
-    //         x: expXgrav.update(event.accelerationIncludingGravity.x),
-    //         y: expYgrav.update(event.accelerationIncludingGravity.y),
-    //         z: expZgrav.update(event.accelerationIncludingGravity.z),
-    //     }
-    // };
-    
-    if (accInterval === null) { // saving seperate from arr to reduce save size
-        // typical ~60hz -> this works for ~1-999hz      ios:seconds,android:millis between updates
-        if (event.interval < 1) {
-            accInterval = event.interval * 1000; //ios
-        } else {
-            accInterval = event.interval; //not ios
-        }
-    };
-        
     rawACCarr.push(rawACC);
-    document.getElementById("ACCtemp").innerText = JSON.stringify(rawACCarr[rawACCarr.length - 1], null, 2);
+
+    const smoothACC = {
+        timestamp: rawACC.timestamp,
+        acceleration: {
+            x: smoothACCmethod.acceleration.x.update(rawACC.acceleration.x),
+            y: smoothACCmethod.acceleration.y.update(rawACC.acceleration.y),
+            z: smoothACCmethod.acceleration.z.update(rawACC.acceleration.z),
+        },
+        rotationRate: {
+            x: smoothACCmethod.rotationRate.x.update(rawACC.rotationRate.x),
+            y: smoothACCmethod.rotationRate.y.update(rawACC.rotationRate.y),
+            z: smoothACCmethod.rotationRate.z.update(rawACC.rotationRate.z),
+        },
+        accelerationIncludingGravity: {
+            x: smoothACCmethod.accelerationIncludingGravity.x.update(rawACC.accelerationIncludingGravity.x),
+            y: smoothACCmethod.accelerationIncludingGravity.y.update(rawACC.accelerationIncludingGravity.y),
+            z: smoothACCmethod.accelerationIncludingGravity.z.update(rawACC.accelerationIncludingGravity.z),
+        }
+    }
+    smoothACCarr.push(smoothACC);
+    console.log(`${JSON.stringify(smoothACC, null,2)}`);
+
+
+    document.getElementById("ACCtemp").innerText = JSON.stringify(smoothACCarr[smoothACCarr.length - 1], null, 2);
 
 
     if (mountingMatrix !== null) {
-        const grav = getGravity(rawACC);
+        const grav = getGravity(smoothACC);
         const grav_deviation = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(grav));
-        const curPitch = -radToDeg(Math.atan2(grav_deviation[1], grav_deviation[2]));
-        const curRoll = -radToDeg(Math.atan2(grav_deviation[0], grav_deviation[2]));
-        debugChartPushData(debugMotionRot, 0, rawACC.timestamp, curPitch);
-        debugChartPushData(debugMotionRot, 1, rawACC.timestamp, curRoll);
-        debugChartPushData(debugMotionRot, 2, rawACC.timestamp, 0);
+        const curPitch = radToDeg(Math.atan2(-grav_deviation[1], grav_deviation[2])); //[1] and [0] negative to fix pitch/roll to x/z axis rhr 
+        const curRoll = radToDeg(Math.atan2(-grav_deviation[0], grav_deviation[2]));
+        debugChartPushData(debugMotionRot, 0, smoothACC.timestamp, curPitch);
+        debugChartPushData(debugMotionRot, 1, smoothACC.timestamp, 0); // leaving 0 for reference line
+        debugChartPushData(debugMotionRot, 2, smoothACC.timestamp, curRoll);
 
 
-        const vehicleAccMat = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(rawACC.acceleration));
+        const vehicleAccMat = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(smoothACC.acceleration));
         // document.getElementById("fineTune").textContent = `crash?  ${JSON.stringify(vehicleAccMat, null, 2)}`;
 
         const vehicleAcc = matrixToXYZ(vehicleAccMat);
-        debugChartPushData(debugMotionAcc, 0, rawACC.timestamp, vehicleAcc.x);
-        debugChartPushData(debugMotionAcc, 1, rawACC.timestamp, vehicleAcc.y);
-        debugChartPushData(debugMotionAcc, 2, rawACC.timestamp, vehicleAcc.z);
-        
-        calcSpeed = calcSpeed + ((vehicleAcc.y / accInterval) * meterPerSecToMilePerHourC);
-        debugChartPushData(debugSpeed, 1, rawACC.timestamp, calcSpeed);
-        
+        // vehicleAcc.y = -vehicleAcc.y; // idk why this is inverted
+        vehicleAcc.x = -vehicleAcc.x;
+        vehicleAcc.y = -vehicleAcc.y;
+        vehicleAcc.z = -vehicleAcc.z;
 
+        debugChartPushData(debugMotionAcc, 0, smoothACC.timestamp, vehicleAcc.x);
+        debugChartPushData(debugMotionAcc, 1, smoothACC.timestamp, vehicleAcc.y);
+        debugChartPushData(debugMotionAcc, 2, smoothACC.timestamp, vehicleAcc.z);
+        
+        calcSpd: {
+            // Step 1: Apply accel-based integration
+            calcSpeed += ((vehicleAcc.y * meterPerSecToMilePerHourC) / accInterval);
+
+            // Step 2: Save current estimate
+            calcSpdArr.push({ timestamp: smoothACC.timestamp, speed: calcSpeed });
+
+            // Step 3: Apply correction if delayed GPS is available
+            if (rawGPSarr.length >= 1) {
+                const lastGPS = rawGPSarr.at(-1);
+                const gpsTime = lastGPS.timestamp - GPSoffset;
+
+                const idx = calcSpdArr.findIndex(p => Math.abs(p.timestamp - gpsTime) <= accInterval);
+                if (idx >= 0) {
+                    const estSpeedAtGPS = calcSpdArr[idx].speed;
+                    const gpsSpeed = lastGPS.coords.speed * meterPerSecToMilePerHourC;
+                    const diff = gpsSpeed - estSpeedAtGPS;
+
+                    // Small nudge toward correcting current speed
+                    const correctionFactor = 0.01;
+                    calcSpeed += diff * correctionFactor;
+                }
+            }
+
+            // if (rawGPSarr.length < 3 || smoothACC.timestamp - rawGPSarr[rawGPSarr.length - 1].timestamp > 2000) {
+            //     // no recent gps data to use
+            //     calcSpeed = calcSpeed + ((vehicleAcc.y / accInterval) * meterPerSecToMilePerHourC);
+            // }
+            // else {
+            //     const lastGPS = rawGPSarr[rawGPSarr.length - 1];
+            //     const calcSpdIDX = calcSpdArr.findIndex(obj => obj.timestamp >= lastGPS.timestamp - GPSoffset);
+            //     let gpsCalcDif;
+            //     if (calcSpdIDX < 0) {
+            //         gpsCalcDif = 0;
+            //     } else {
+            //         gpsCalcDif = calcSpdArr[calcSpdIDX].speed - lastGPS.coords.speed * meterPerSecToMilePerHourC
+            //         document.getElementById("test").textContent = `${gpsCalcDif}`;
+            //     }
+            //     calcSpeed = calcSpeed + ((vehicleAcc.y / accInterval) * meterPerSecToMilePerHourC) + (gpsCalcDif / (accInterval * 2)); // this could probably be done better but i dont want to implement logs or moving exponentials rn
+            // }
+
+            // calcSpdArr.push({ timestamp: smoothACC.timestamp, speed: calcSpeed });
+            debugChartPushData(debugSpeed, 1, smoothACC.timestamp, calcSpeed);
+        }
 
     } else {
-        debugChartPushData(debugMotionAcc, 0, rawACC.timestamp, rawACC.accelerationIncludingGravity.x);
-        debugChartPushData(debugMotionAcc, 1, rawACC.timestamp, rawACC.accelerationIncludingGravity.y);
-        debugChartPushData(debugMotionAcc, 2, rawACC.timestamp, rawACC.accelerationIncludingGravity.z);
-        debugChartPushData(debugMotionRot, 0, rawACC.timestamp, rawACC.rotationRate.x);
-        debugChartPushData(debugMotionRot, 1, rawACC.timestamp, rawACC.rotationRate.y);
-        debugChartPushData(debugMotionRot, 2, rawACC.timestamp, rawACC.rotationRate.z);
+        debugChartPushData(debugMotionAcc, 0, smoothACC.timestamp, smoothACC.accelerationIncludingGravity.x);
+        debugChartPushData(debugMotionAcc, 1, smoothACC.timestamp, smoothACC.accelerationIncludingGravity.y);
+        debugChartPushData(debugMotionAcc, 2, smoothACC.timestamp, smoothACC.accelerationIncludingGravity.z);
+        debugChartPushData(debugMotionRot, 0, smoothACC.timestamp, smoothACC.rotationRate.x);
+        debugChartPushData(debugMotionRot, 1, smoothACC.timestamp, smoothACC.rotationRate.y);
+        debugChartPushData(debugMotionRot, 2, smoothACC.timestamp, smoothACC.rotationRate.z);
     }
 
 
-}
-const test = applyRotationMatrix(matrixTranspose([[-0.9,-0.2,0.0,],[-0.01,0.2,-0.97],[0.02,-0.97,-0.2]]), [0,-9.8,1]);
-console.log(Math.atan2(test[1],test[2]));
-console.log(Math.atan2(test[0],test[2]));
 
-
-function gyroHandler(event) {
-    let gyro = {};
-    if ('webkitCompassHeading' in event) { // ios
-        gyro = {
-            timestamp: event.timeStamp,
-            alpha: event.alpha,
-            beta: event.beta,
-            gamma: event.gamma,
-            compassHeading: event.webkitCompassHeading,
-            compassAccuracy: event.webkitCompassAccuracy,
-        };
-    } else { //android
-        gyro = {
-            timestamp: event.timeStamp,
-            alpha: event.alpha,
-            beta: event.beta,
-            gamma: event.gamma,
-        };
-    }
-    rawGYROarr.push(gyro);
-    document.getElementById("GYROtemp").innerText = JSON.stringify(gyro, null, 2);
 
 }
+// const test = applyRotationMatrix(matrixTranspose([[-0.9,-0.2,0.0,],[-0.01,0.2,-0.97],[0.02,-0.97,-0.2]]), [0,-9.8,1]);
+// console.log(Math.atan2(test[1],test[2]));
+// console.log(Math.atan2(test[0],test[2]));
+
+
 
 
 
@@ -270,14 +315,16 @@ function gpsHandler(position) {
         }
     };
 
-    rawGPSarr.push(adjusted);
-
+    document.getElementById("GPStemp").innerText = JSON.stringify(adjusted, null, 2);
+    
     if (adjusted.coords.speed !== null) {
-        calcSpeed = adjusted.coords.speed * meterPerSecToMilePerHourC;
+        rawGPSarr.push(adjusted);
+        // calcSpeed = adjusted.coords.speed * meterPerSecToMilePerHourC;
         debugChartPushData(debugSpeed, 0, adjusted.timestamp, adjusted.coords.speed * meterPerSecToMilePerHourC);
+    } else {
+        return; // dont recheck mounting if speed null
     }
 
-    document.getElementById("GPStemp").innerText = JSON.stringify(adjusted, null, 2);
 
     mounting: {
         if (rawGPSarr.length < 3) {
@@ -325,36 +372,42 @@ function gpsHandler(position) {
         // if beyond here: moving realtively straight, relatively flat
         document.getElementById("fineTune").textContent += `\npath acc ${pathAccuracy}`; 
         // set down vector
-        const firstAccITX = rawACCarr.findIndex(obj => obj.timestamp >= gpsFirst.timestamp - GPSoffset);
-        const lastAccITX = rawACCarr.findIndex(obj => obj.timestamp >= gpsLast.timestamp - GPSoffset);
+        const firstAccITX = smoothACCarr.findIndex(obj => obj.timestamp >= gpsFirst.timestamp - GPSoffset);
+        const lastAccITX = smoothACCarr.findIndex(obj => obj.timestamp >= gpsLast.timestamp - GPSoffset);
         
         if ( (lastAccITX - firstAccITX) < 30) { // should be ~60x (subsec.length-1)
+            document.getElementById("fineTune").textContent += `\nITX len Break`;
             break mounting;
         }
         
         /** @type {downVec} */
         let potentialDown = { x:0, y:0, z:0, gpsQual:pathAccuracy, rotationQual:0, timestampPoints:[gpsFirst.timestamp, gpsLast.timestamp], pointAmt:1 }; // point amt not setup b/c gps still static 3 point
         
-
+        
         for ( let i = firstAccITX; i <= lastAccITX; i++ ) {
-            const grav = getGravity(rawACCarr[i]);
+            const grav = getGravity(smoothACCarr[i]);
             addVectors(potentialDown, grav); // potentialdown += gravity (xyz)
-            potentialDown.rotationQual += xyzMagnitude(rawACCarr[i].rotationRate);
+            potentialDown.rotationQual += xyzMagnitude(smoothACCarr[i].rotationRate);
         }
         potentialDown.x /= lastAccITX-firstAccITX;
         potentialDown.y /= lastAccITX-firstAccITX;
         potentialDown.z /= lastAccITX-firstAccITX;
         potentialDown.rotationQual /= lastAccITX-firstAccITX;
-        if (downVec.gpsQual === null) {
+        
+
+        
+
+        if (downVec.timestampPoints === null) {
             downVec = potentialDown;
+            document.getElementById("fineTune").textContent += `\nDown point init set`;
         } else {
             
             // check if down is flat out better
             const downVecWeights = { gpsQual:1, rotationQual:1, pointAmt:.1 };
-
-            const potBal = propertyBalance(potentialDown, downVecWeights) + potentialDown.timestampPoints[potentialDown.timestampPoints.length-1]/100000;
-            const curBal = propertyBalance(downVec, downVecWeights) + downVec.timestampPoints[downVec.timestampPoints.length-1]/100000;
-
+            
+            const potBal = propertyBalance(potentialDown, downVecWeights) + potentialDown.timestampPoints[potentialDown.timestampPoints.length-1]/10000;
+            const curBal = propertyBalance(downVec, downVecWeights) + downVec.timestampPoints[downVec.timestampPoints.length-1]/10000;
+            
             if (potBal === null || curBal === null) {
                 //something went very very wrong
                 window.alert("Null balance - this shouldn't be possible");
@@ -378,16 +431,16 @@ function gpsHandler(position) {
         document.getElementById("fineTune").textContent += `\nDownVec ${JSON.stringify(downVec, null, 2)}`;
         
         
-        const forwardVecAccThres = 2;
-        const forwardVecMinPoints = 20;
         
-        
-        // 2pointer find periods of continuious acceleration
+        const forwardVecAccThres = 1.5;
+        const forwardVecMinPoints = 4;
+        const forwardVecRotThres = 15; // smoothed so lower is fine
+                // 2pointer find periods of continuious acceleration
         let l = 0, r = 0;
-        while (l < rawACCarr.length) {
-            if (xyzMagnitude(rawACCarr[l].acceleration) > forwardVecAccThres) {
+        while (l < smoothACCarr.length-1) {
+            if (xyzMagnitude(smoothACCarr[l].acceleration) > forwardVecAccThres && xyzMagnitude(smoothACCarr[l].rotationRate) < forwardVecRotThres) {
                 r = l;
-                while (xyzMagnitude(rawACCarr[r].acceleration) > forwardVecAccThres && r < rawACCarr.length) {
+                while (r < smoothACCarr.length-1 && xyzMagnitude(smoothACCarr[r].acceleration) > forwardVecAccThres && xyzMagnitude(smoothACCarr[l].rotationRate) < forwardVecRotThres) {
                     r++;
                 }
                 // here [l to r] meets acc thres
@@ -395,24 +448,24 @@ function gpsHandler(position) {
                     l=r;
                     continue;
                 }
-                let potentialForward = { x:0, y:0, z:0, gDif:0, rotationQual:0, timestampPoints:[gpsFirst.timestamp, gpsLast.timestamp], pointAmt:r-l };
+                let potentialForward = { x:0, y:0, z:0, gDif:0, rotationQual:0, timestampPoints:[smoothACCarr[l].timestamp, smoothACCarr[r].timestamp], pointAmt:r-l };
                 for (let k = l; k < r; k++) {
-                    addVectors(potentialForward, rawACCarr[k].acceleration);
-                    potentialForward.gDif += xyzDistance(downVec, getGravity(rawACCarr[k]));
-                    potentialForward.rotationQual += xyzMagnitude(rawACCarr[k].rotationRate);
+                    addVectors(potentialForward, smoothACCarr[k].acceleration);
+                    potentialForward.gDif += xyzDistance(downVec, getGravity(smoothACCarr[k]));
+                    potentialForward.rotationQual += xyzMagnitude(smoothACCarr[k].rotationRate);
                 }
                 potentialForward.x /= r-l;
                 potentialForward.y /= r-l;
                 potentialForward.z /= r-l;
                 potentialForward.gDif /= r-l;
                 potentialForward.rotationQual /= r-l;
-                if (forwardVec.x === null) {
+                if (forwardVec.timestampPoints === null) {
                     forwardVec = potentialForward;
                     l=r;
                     continue;
                 }
 
-                const forwardVecWeights = { gDif:1, rotationQual:1, pointAmt:1 };
+                const forwardVecWeights = { gDif:5, rotationQual:1, pointAmt:-1 }; // todo: favor recent via timestamp 
                 if (propertyBalance(potentialForward, forwardVecWeights) < propertyBalance(forwardVec, forwardVecWeights)) {
                     forwardVec = potentialForward;
                 }
@@ -421,13 +474,11 @@ function gpsHandler(position) {
                 l++;
             }
         }
-        document.getElementById("fineTune").textContent += `\nForwardVec ${JSON.stringify(forwardVec, null, 2)}`;
 
-        if (forwardVec.x !== null && downVec.x !== null) {
-            mountingMatrix = makeMountMatrix(downVec, forwardVec);
-            document.getElementById("fineTune").textContent += `\n matrix made`;
-            // document.getElementById("fineTune").textContent += `\nMounting Matrix ${JSON.stringify(mountingMatrix, null, 2)}`;
-        }
+		document.getElementById("fineTune").textContent += `\nForwardVec? ${JSON.stringify(forwardVec, null, 2)}`;
+        mountingMatrix = makeMountMatrix(downVec, forwardVec);
+        document.getElementById("fineTune").textContent += `\n matrix made`;
+        // document.getElementById("fineTune").textContent += `\nMounting Matrix ${JSON.stringify(mountingMatrix, null, 2)}`;
 
     }
 }
@@ -450,3 +501,10 @@ function propertyBalance(obj, weights = {} ) {
 function onGPSError(error) {
     alert(`GPS error: ${error.message}`);
 }
+
+window.onerror = function (message, source, lineno, colno, error) {
+  window.alert(`Global error: ${message} at ${source}, ${lineno}, ${colno}`);
+  // optionally send to a server for logging
+};
+
+document.getElementById("test").textContent = `end Reached`;

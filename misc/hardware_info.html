@@ -4,15 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="initial-scale=1.0">
     <meta name="author" content="https://github.com/ironman356">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="robots" content="noindex, nofollow, noimageindex" />
     <title>Hardware Info</title>
     <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
         body {
-            margin: 5% 5%;
-            font-size: 150%;
+            border: 2px solid blue;
+            position: absolute;
+            padding: 30px;
+            top: env(safe-area-inset-top);
+            right: env(safe-area-inset-right);
+            bottom: env(safe-area-inset-bottom);
+            left: env(safe-area-inset-left);
         }
         button, input {
-            font-size: 120%;
+            font-size: 200%;
         }
     </style>
 </head>
@@ -33,6 +47,8 @@
     <label>Memory: <span id="memory">--</span></label><br />
     <label>Online: <span id="online">--</span></label><br />
     <label>Orientaiton: <span id="orientaiton">--</span></label><br />
+
+    <label>Blue box: <span id="blueBoxArea">--x--</span></label>
 
     <script src="hardware_info.js"></script>
 </body>
