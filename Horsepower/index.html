@@ -8,45 +8,81 @@
     <title>Horsepower</title>
     <link rel="stylesheet" href="style.css">
     <link rel="icon" href="../favicon.ico" type="image/x-icon">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="shortcut icon" type="image/x-icon" href="https://alexander-held.rf.gd/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="https://alexander-held.rf.gd/apple-touch-icon.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 
 </head>
 <body>
-    <h3>debug: V1.3</h3>
-    <nav><a href="../web_sensors.html">Directory</a></nav>
-    <a href="./replayer.html">Replayer</a>
-    <h2>WIP</h2>
+    <nav id="topNav">
+        <a href="../web_sensors.html">Directory</a>
+        <div><h3>WIP V1.3</h3></div> <!-- Placeholder for grid styling alignment b/c lazy -->
+        <button id="prevButton">prevButton</button>
+        <span id="curPage">curPage</span>
+        <button id="nextButton">nextButton</button>
+    </nav>
 
-    <label for="calcSpeed">Speed: </label><span id="calcSpeed"></span>
-    <br />
-    <label for="calcHeading">Heading: </label><span id="calcHeading"></span>
-    <br />
-    <label for="horsepower">HP: </label><span id="horsepower"></span>
-    <br />
+    <main>
+    <div class="primarySectionWrapper">
+        <div class="primarySection" id="Live">
+            <label for="calcSpeed">Speed: </label><span id="calcSpeed"></span>
+            <label for="calcHeading">Heading: </label><span id="calcHeading"></span>
+            <label for="horsepower">HP: </label><span id="horsepower"></span>
+            <div><span id="temp">15</span>°</div>
+            <div><span id="humidity">15</span>%</div>
+            <canvas id="tractionCircle" hidden></canvas>
 
-    <canvas id="tractionCircle" hidden></canvas>
+            <button id="pairButton">Pair</button>
+            <button id="saveRecordedButton" hidden>Save</button>
+        </div>
+        
+        <div class="primarySection" id="Settings">
+            <div style="grid-column: 1/-1; grid-row: 1/-1;">
 
 
 
+            <label style="width:100%;">gps offset millis: <input type="number" id="gpsOffset" min="0" set="1" value="500"></label>
+            <label style="width:100%">gps offset millis: <input type="number" id="" min="0"></label>
+            
 
 
-    <canvas id="debugGraphSpeed" class="chart" height="120"></canvas>
-    <canvas id="debugMotionRot" class="bigChart" height="120"></canvas>
-    <canvas id="debugMotionAcc" class="bigChart" height="120"></canvas>
-    <pre id="fineTune">tune</pre>
-    <pre id="test">test</pre>
-    <!-- <video id="debugCamera"  autoplay muted playsinline></video> -->
-    <video id="debugCamera" width="380" height="200" autoplay muted playsinline></video>
 
-    <br />
-    <button id="pairButton">Pair</button>
-    <button id="settingsMenuButton">Settings</button>
-    <br />
-    <button id="saveRecordedButton">Save</button>
-    <pre id="GPStemp"></pre>
-    <pre id="ACCtemp"></pre>
-    <pre id="GYROtemp"></pre>
+            <!-- <h3>No settings implemented yet</h3> -->
+            <pre id="GPStemp"></pre>
+            <pre id="ACCtemp"></pre>
+
+            </div>
+        </div>
+        
+        <div class="primarySection" id="Debug">
+
+            <div id="tableContainer">
+            <table id="debugLedger">
+                <thead>
+                    <tr><th>Category</th><th>Description</th><th>Timestamp</th></tr>
+                </thead>
+            </table>
+            </div>
+
+            <canvas id="debugGraphSpeed"></canvas>
+            <canvas id="debugMotionAcc"></canvas>
+            <canvas id="debugMotionRot"></canvas>
+            <canvas id="debugIncRoll"></canvas>
+
+            <button id="pairCamera">Pair Camera</button>
+            <video id="debugCamera" width="380" height="200" autoplay muted playsinline></video>
+            
+        </div>
+        
+        <div class="primarySection" id="Replayer">
+            <h3>replayer not implemented yet</h3>
+            <input type="file" id="replayUpload" accept=".json" value="file here" style="grid-area: 4 / 1 / 5 / 10"/>
+        </div>
+    </div>
+    </main>
 
     <script type="module" src="js/main.js"></script>
 </body>

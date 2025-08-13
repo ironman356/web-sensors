@@ -9,7 +9,7 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
                 lineLabels.map((label, i) => ({
                     label,
                     data: [],
-                    borderColor: ["red","blue","green","black","orange","purple"][i % 6],
+                    borderColor: ["red","green","blue", "yellow","cyan","magenta"][i % 6],
                     borderWidth: 1,
                     tension: 0,
                     pointRadius: 0,
@@ -18,6 +18,8 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: true,
+            aspectRatio: 9/2,
             animation: false,
             transitions: {
                 'default': false
@@ -39,6 +41,7 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
             },
             plugins: {
                 legend: {
+                    display: false,
                     labels: {
                         font: {
                             size: 10
@@ -52,14 +55,11 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
 
 const CHARTCUTOFF = 5_000;
 export function debugChartSetData(chart, datasetIndex, data) {
-    // chart.data.datasets[datasetIndex].data.push({ x: timestamp, y: value });
     chart.data.datasets[datasetIndex].data = data; 
-
-    const cutoff = data[data.length - 1].x - CHARTCUTOFF;
-    chart.data.datasets.forEach(ds => {
-        ds.data = ds.data.filter(pt => pt.x >= cutoff);
-    });
-
+    // const cutoff = data[data.length - 1].x - CHARTCUTOFF;
+    // chart.data.datasets.forEach(ds => {
+    //     ds.data = ds.data.filter(pt => pt.x >= cutoff);
+    // });
     // chart.options.scales.x.min = cutoff;
     chart.update(datasetIndex === 0 ? 'none' : undefined);
 }
@@ -95,11 +95,31 @@ export async function startDebugCamera(videoElId) {
         });
 
         const info = JSON.stringify(stream.getVideoTracks()[0].getSettings(), null, 2)
-        document.getElementById("fineTune").textContent = `vidSettings ${info}`;
+        // document.getElementById("fineTune").textContent = `vidSettings ${info}`;
 
         document.getElementById(videoElId).srcObject = stream;
     } catch (err) {
         console.error(err);
         alert("Could not start 'Back Ultra Wide Camera':" + err.message);
     }
+}
+
+export function debugTableAdd(category, msg, timestamp = Date.now(), tableRef, clearOlderThanMillis = -1) {
+    // remove old rows if desired
+    if (clearOlderThanMillis >=  0) {
+        const rowCleanupThres = Date.now() - clearOlderThanMillis;
+        Array.from(tableRef.rows).forEach(row => {
+            const rowTimeCell = row.cells[2];
+            const rowTime = rowTimeCell ? Number(rowTimeCell.textContent) : NaN;
+            
+            if (rowTime < rowCleanupThres) {
+                row.remove();
+            }
+        });
+    }
+
+    const newRow = tableRef.insertRow(1); // 1 because of top head/label row
+    newRow.insertCell().textContent = category;
+    newRow.insertCell().textContent = msg;
+    newRow.insertCell().textContent = timestamp;
 }

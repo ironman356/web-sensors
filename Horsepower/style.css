@@ -1,27 +1,182 @@
-#fineTune {
+
+:root {
+	--cols: 9;
+	--rows: 18;
+	--gap: 0px;
+	--padding: 1%;
+}
+
+body {
+	margin: 0;
+	padding: 0;
+	overflow: hidden;
+}
+
+nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr 2fr 1fr 2fr;
+    grid-column-gap: 10px;
+    transition:opacity 0.3s ease;
+}
+#topNav {
+    display: none;
+    opacity: 0;
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#topNav.showing {
+    display: grid; /* set via JS */
+    grid-template-columns: 1fr 1fr 2fr 1fr 2fr;
+    grid-column-gap: 10px;
+}
+
+#topNav.visible {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+nav a, nav button {
+	font-size: clamp(1rem, 5vw, 2rem);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	text-align: center;
+	width: 100%;
+	height: 100%;
+}
+
+.primarySectionWrapper {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100%;
+	width: 100%;
+	padding: var(--padding);
+	box-sizing: border-box;
+}
+
+.primarySection {
+	display: grid;
+	grid-template-columns: repeat(var(--cols), 1fr);
+	grid-template-rows: repeat(var(--rows), 1fr);
+	gap: var(--gap);
+	aspect-ratio: calc(var(--cols) / var(--rows));
+	width: min(
+		calc(100vw - 2 * var(--padding)),
+		calc((100vh - 2 * var(--padding)) * (var(--cols) / var(--rows)))
+	);
+	border: 2px solid gray; 
+}
+
+.primarySection > * {
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	/* border: 2px solid red; */
+    display: block;
+    line-height: 1;
+    margin: 0;
+}
+
+#comboTractionCircle {
+	grid-area: 5 / 1 / 7 / 10;
+	width: 100%;
+	height: 100%;
+	max-width: 100%;
+	max-height: 100%;
+	display: block;
+	object-fit: contain;
+}
+
+/* initial hiding of all but 1st page */
+#Live {
+	/* blank on purpose */
+}
+#Settings , #Debug, #Replayer {
+	display: none;
+}
+
+
+#Settings {
+	overflow: scroll;
+}
+
+
+#tractionCircle {
+    grid-area: 5 / 1 / 7 / 10;
+}
+#debugGraphSpeed {
+    grid-area: 6 / 1 / 8 / 10;
+}
+#debugMotionRot {
+    grid-area: 8 / 1 / 10 / 10;
+}
+#debugMotionAcc {
+    grid-area: 10 / 1 / 12 / 10;
+}
+#debugCamera {
+    grid-area: 12 / 1 / 17 / 10;
+	pointer-events: none;
+	z-index: 1;
+}
+#pairCamera {
+	grid-area: 13 / 2 / 16 / 9;
+}
+#debugIncRoll {
+	grid-area: 17 / 1 / 19 / 10;
+}
+
+
+
+#tableContainer {
+	grid-area: 1 / 1 / 6 / 10;
+	overflow: scroll;
+}
+#debugLedger {
+	display: table;
+	width: 100%;
+	max-height: 100%;
+	border-collapse: collapse;
+	/* border: 2px solid black; */
+	font-size: 8px;
+}
+#debugLedger th,
+#debugLedger td {
+	border: 1px solid black;
+	padding: 10px;
+	text-align: left;
+	box-sizing: border-box;
+	vertical-align: top;
+	height: 10px;
+}
+#debugLedger tr td:nth-child(1) {
+  width: 15%;
+}
+#debugLedger tr td:nth-child(2) {
+  width: 70%;
+}
+#debugLedger tr td:nth-child(3) {
+  width: 15%;
+}
+
+
+
+#test {
+	display: none;
+    grid-area: 1 / 7 / 5 / 10;
     font-size: 8px;
 }
 
-button {
-    font-size: 200%;
+
+
+#GPStemp {
+    font-size: 6px;
+    grid-area: 5 / 1 / 8 / 10;
+
 }
-
-#tractionCircle {
-    width: 10vw;      /* scale with viewport width */
-    max-width: 50px;  /* keep max size */
-    aspect-ratio: 1 / 1;
+#ACCtemp {
+    font-size: 6px;
+    grid-area: 8 / 1 / 15 / 10;
 }
-
-.chart {
-    width: 100%;
-    height: 15vh;     /* fixed height relative to viewport */
-    max-height: 120px;
-}
-
-.bigChart {
-    width: 100%;
-    height: 30vh;     /* bigger height */
-    max-height: 240px;
-}
-
-
