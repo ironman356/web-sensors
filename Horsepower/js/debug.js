@@ -1,80 +1,104 @@
 
 
-export function debugChartInit(chartElId, lineLabels, yAxisLabel) {
-    const ctx = document.getElementById(chartElId).getContext('2d');
-    return new Chart(ctx, {
-        type: "line",
-        data: {
-            datasets:
-                lineLabels.map((label, i) => ({
-                    label,
-                    data: [],
-                    borderColor: ["red","green","blue", "yellow","cyan","magenta"][i % 6],
-                    borderWidth: 1,
-                    tension: 0,
-                    pointRadius: 0,
-                    pointHoverRadius: 0,
-                }))
+
+
+export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 5000) {
+    const chartEl = document.getElementById(chartElId);
+
+    const colors = ["red","green","blue","yellow","cyan","magenta"];
+    const series = lineLabels.map((label, i) => ({
+        name: label,
+        type: 'line',
+        showSymbol: false,
+        data: [],
+        lineStyle: { color: colors[i % colors.length], width: 1 },
+        smooth: false
+    }));
+
+    const chart = echarts.init(chartEl);
+    chart.setOption({
+        animation: false,
+        tooltip: { show: false },
+        grid: {
+            top: '5%',
+            bottom: '5%',
+            left: '5%',
+            right: '5%',
+            containLabel: true
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            aspectRatio: 9/2,
-            animation: false,
-            transitions: {
-                'default': false
-            },
-            elements: {
-                line: {
-                    fill: false
-                }
-            },
-            scales: {
-                x: {
-                    type: 'time',
-                    display: false
-                },
-                y: {
-                    title: { display: true, text: yAxisLabel },
-                    beginAtZero: false
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false,
-                    labels: {
-                        font: {
-                            size: 10
-                        }
-                    }
-                }
+        xAxis: { type: 'time', show: false },
+        yAxis: {
+            name: yAxisLabel,
+            scale: true,
+            nameLocation: 'middle',    // 'start', 'middle', 'end'
+            nameGap: 0,               // distance from axis line
+            nameTextStyle: { fontSize: 12 },
+            axisLabel: { margin: 30 }
+        },
+        series
+    });
+
+    const buffers = lineLabels.map(() => []);
+    const fullData = lineLabels.map(() => []);
+
+    chart._buffers = buffers;
+    chart._fullData = fullData;
+    chart._CHARTCUTOFF = CHARTCUTOFF;
+
+    setInterval(() => {
+        let newestTimestamp = 0;
+        // newest timestamp from all series
+        fullData.forEach(series => {
+            if (series.length) {
+                const ts = series[series.length - 1][0];
+                if (ts > newestTimestamp) newestTimestamp = ts;
             }
-        },
-    });
+        });
+
+        for (let i = 0; i < buffers.length; i++) {
+            const buf = buffers[i];
+            if (buf.length) {
+                fullData[i].push(...buf);
+                buffers[i] = [];
+
+                // remove old points beyond cutoff
+                while (fullData[i].length && fullData[i][0][0] < newestTimestamp - CHARTCUTOFF) {
+                    fullData[i].shift();
+                }
+
+                chart.setOption({
+                    series: [{
+                        name: lineLabels[i],
+                        data: fullData[i]
+                    }]
+                });
+            }
+        }
+    }, 1000 / 60); // 60hz
+
+    chart.pushData = (seriesIndex, timestamp, value) => {
+        buffers[seriesIndex].push([timestamp, value]);
+    };
+
+    chart.setData = (seriesIndex, data) => {
+        fullData[seriesIndex] = data;
+        buffers[seriesIndex] = [];
+        chart.setOption({
+            series: [{
+                name: lineLabels[seriesIndex],
+                data
+            }]
+        });
+    };
+
+    return chart;
 }
 
-const CHARTCUTOFF = 5_000;
-export function debugChartSetData(chart, datasetIndex, data) {
-    chart.data.datasets[datasetIndex].data = data; 
-    // const cutoff = data[data.length - 1].x - CHARTCUTOFF;
-    // chart.data.datasets.forEach(ds => {
-    //     ds.data = ds.data.filter(pt => pt.x >= cutoff);
-    // });
-    // chart.options.scales.x.min = cutoff;
-    chart.update(datasetIndex === 0 ? 'none' : undefined);
-}
 
-export function debugChartPushData(chart, datasetIndex, timestamp, value) {
-    chart.data.datasets[datasetIndex].data.push({ x: timestamp, y: value });
 
-    const cutoff = timestamp - CHARTCUTOFF;
-    chart.data.datasets.forEach(ds => {
-        ds.data = ds.data.filter(pt => pt.x >= cutoff);
-    });
 
-    // chart.options.scales.x.min = cutoff;
-    chart.update(datasetIndex === 0 ? 'none' : undefined);
-}
+
+
 
 export async function startDebugCamera(videoElId) {
     try {
@@ -95,7 +119,6 @@ export async function startDebugCamera(videoElId) {
         });
 
         const info = JSON.stringify(stream.getVideoTracks()[0].getSettings(), null, 2)
-        // document.getElementById("fineTune").textContent = `vidSettings ${info}`;
 
         document.getElementById(videoElId).srcObject = stream;
     } catch (err) {
