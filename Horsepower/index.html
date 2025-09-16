@@ -16,45 +16,45 @@
 
 
 </head>
-<body>
+<header>
     <nav id="topNav">
         <a href="../web_sensors.html">Directory</a>
-        <div><h3>WIP V1.8</h3></div> <!-- Placeholder for grid styling alignment b/c lazy -->
+        <h3>WIP V1.8</h3>
         <button id="prevButton">prevButton</button>
         <span id="curPage">curPage</span>
         <button id="nextButton">nextButton</button>
     </nav>
-
-    <main>
+</header>
+<body>
+<main>
     <div class="primarySectionWrapper">
         <div class="primarySection" id="Live">
-            <label for="calcSpeed">Speed: </label><span id="calcSpeed"></span>
-            <label for="calcHeading">Heading: </label><span id="calcHeading"></span>
-            <label for="horsepower">HP: </label><span id="horsepower"></span>
-            <div><span id="temp">15</span>°</div>
-            <div><span id="humidity">15</span>%</div>
-            <canvas id="tractionCircle" hidden></canvas>
+            <span id="calcSpeed">123</span><label for="calcSpeed" id="calcSpeedUnits">MPH</label>
+            <!-- <label for="calcHeading">Heading: </label> --><span id="calcHeading">NE</span>
+            <span id="horsepower">123</span><label for="horsepower" id="horsepowerUnits">HP</label>
+            <span id="temp">123</span><label for="temp" id="tempUnits">°f</label>
+            <span id="humidity">50</span><label for="humidity" id="humidityUnits">%</label>
+            <canvas id="tractionCircle" style="background-color: beige;"></canvas>
 
-            <button id="pairButton">Pair</button>
-            <button id="saveRecordedButton" hidden>Save</button>
         </div>
         
         <div class="primarySection" id="Settings">
-            <div style="grid-column: 1/-1; grid-row: 1/-1; display:flex; flex-direction: column;">
+            <button id="pairButton">Pair</button>
+            <button id="saveRecordedButton" hidden>Save</button>
+
+            <button id="showAll">Show All Tabs</button>
 
 
-
-            <label style="width:100%;">gps offset millis: <input type="number" id="gpsOffset" min="0" set="1" value="500"></label>
-            <label style="width:100%">gps offset millis: <input type="number" id="" min="0"></label>
+            <label for="gpsOffset" id="gpsOffsetLabel">gps offset millis:</label><input type="number" id="gpsOffset" min="0" step="1" value="500" max="10000" />
+            <!-- <label style="width:100%">TEST: <input type="number" id="" min="0"></label> -->
             
 
 
 
-            <!-- <h3>No settings implemented yet</h3> -->
             <pre id="GPStemp"></pre>
             <pre id="ACCtemp"></pre>
 
-            </div>
+            <!-- </div> -->
         </div>
         
         <div class="primarySection" id="Debug">
@@ -76,9 +76,9 @@
             <video id="debugCamera" width="380" height="200" autoplay muted playsinline></video>
 
             <div id="qualReadoutsDown">
-                <label style="width:100%;">straightQual  : <span id="straightQual">--</span></label>
                 <label style="width:100%;">down setup  : <span id="downVecSetup">--</span></label>
                 <label style="width:100%;">down running: <span id="downVecRunning">--</span></label>
+                <label style="width:100%;">straightQual  : <span id="straightQual">--</span></label>
             </div>
             <div id="qualReadotsForw">
                 <label style="width:100%;">forw setup  : <span id="forwVecSetup">--</span></label>
@@ -88,13 +88,15 @@
         </div>
         
         <div class="primarySection" id="Replayer">
-            <h3>replayer not implemented yet</h3>
-            <input type="file" id="replayUpload" accept=".json" value="file here" style="grid-area: 4 / 1 / 5 / 10"/>
+            <input type="file" id="replayUpload" accept=".json" value="file here"/>
+            <label for="replayProgress"><div>Replay Progress:<div><span id="replayProgressSpanValue">-</span>/<span id="replayProgressSpanMax">-</span></div></div><progress id="replayProgress" value="0" max="1"></progress></label>
 
 
         </div>
     </div>
     </main>
+    
+    <!-- <footer></footer> placeholder -->
 
     <script type="module" src="js/main.js"></script>
 </body>

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="author" content="https://github.com/ironman356">
+    <meta name="robots" content="noindex, nofollow, noimageindex" />
+    <title>Horsepower</title>
+    <style>
+* { margin: 0; padding: 0; }
+
+:root {
+	--cols: 9;
+	--rows: 18;
+	--gap: 0px;
+	--padding: 1%;
+	--sqFontSize: (100vh - 2 * var(--padding)) / 18;
+}
+
+body {
+	overflow: hidden;
+	font-family: monospace;
+	font-size: calc(var(--sqFontSize));
+	background-color: #222;
+	color: #fff;
+}
+
+nav {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    grid-column-gap: 10px;
+    transition:opacity 0.3s ease;
+}
+#topNav {
+    display: none;
+    opacity: 0;
+    transform: scaleY(0);
+    transform-origin: top;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+#topNav.showing {
+    display: grid; /* set via JS */
+    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+    grid-column-gap: 10px;
+}
+
+#topNav.visible {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+nav * {
+	font-size: clamp(8px, 5vw, 2rem);
+	padding: 10px 0;
+	white-space: nowrap;
+	text-overflow: clip;
+	overflow:hidden;
+	text-align: center;
+	width: 100%;
+	height: 100%;
+}
+
+.primarySectionWrapper {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: 100%;
+	width: 100%;
+	padding: var(--padding);
+	box-sizing: border-box;
+	gap: 25px;
+}
+
+.primarySection {
+	display: grid;
+	grid-template-columns: repeat(var(--cols), 1fr);
+	grid-template-rows: repeat(var(--rows), 1fr);
+	gap: var(--gap);
+	aspect-ratio: calc(var(--cols) / var(--rows));
+	width: min(
+		calc(100vw - 2 * var(--padding)),
+		calc((100vh - 2 * var(--padding)) * (var(--cols) / var(--rows)))
+	);
+	border: 2px solid gray; 
+}
+
+.primarySection > * {
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	/* border: 2px solid red; */
+    display: block;
+}
+
+#comboTractionCircle {
+	grid-area: 5 / 1 / 7 / 10;
+	width: 100%;
+	height: 100%;
+	max-width: 100%;
+	max-height: 100%;
+	display: block;
+	object-fit: contain;
+}
+
+/* initial hiding of all but 1st page */
+#Live { /* blank on purpose */ }
+#Settings , #Debug, #Replayer { display: none; }
+
+/* Live tab */
+#calcSpeed {
+	grid-area: 1 / 1 / 3 / 5;
+	font-size: calc(var(--sqFontSize) * 2);
+	text-align: right;
+}
+#calcSpeedUnits {
+	grid-area: 2 / 5 / 3 / 7;
+	text-align: right;
+}
+#calcHeading {
+	grid-area: 1 / 7 / 3 / 10;
+	font-size: calc(var(--sqFontSize) * 1.5);
+	text-align: center;
+}
+#temp {
+	grid-area: 3 / 7 / 4 / 9;
+	text-align: right;
+	font-size: .75em;
+	padding-top: .25em;
+}
+#tempUnits {
+	grid-area: 3 / 9 / 4 / 10;
+	text-align: center;
+	font-size: .5em;
+	padding-top: 1em; /* vertical alignment */	
+}
+#humidity {
+	grid-area: 4 / 7 / 5 / 9;
+	text-align: right;
+	font-size: .75em;
+	padding-top: .25em;
+}
+#humidityUnits {
+	grid-area: 4 / 9 / 5 / 10;
+	text-align: center;
+	font-size: .5em;
+	padding-top: 1em; /* vertical alignment */
+}
+
+#horsepower {
+	grid-area: 3 / 1 / 5 / 5;
+	font-size: calc(var(--sqFontSize) * 2);
+	text-align: right;
+	overflow: visible;	
+}
+#horsepowerUnits {
+	grid-area: 4 / 5 / 5 / 7;
+	font-size: calc(var(--sqFontSize));
+	text-align: right;
+}
+#tractionCircle {
+	grid-area: 10 / 1 / 19 / 10;
+}
+
+
+/* Settings tab */
+#Settings {
+	/* overflow: scroll; */
+}
+#showAll { grid-area: 8 / 1 / 9 / -1; } /* don't put at top - rapidly switching tabs can misclick */
+#gpsOffsetLabel {
+	grid-area: 2 / 1 / 3 / -1;
+	font-size: calc(var(--sqFontSize) * .5);
+	padding-top: 1em;
+}
+#gpsOffset {
+	grid-area: 2 / 7 / 3 / -1;
+}
+
+/* Debug tab */
+#debugGraphSpeed {
+    grid-area: 6 / 1 / 8 / 10;
+	/* border: 1px solid #00000030; */
+}
+#debugMotionRot {
+    grid-area: 8 / 1 / 10 / 10;
+	/* border: 1px solid #00000030; */
+}
+#debugMotionAcc {
+    grid-area: 10 / 1 / 12 / 10;
+	/* border: 1px solid #00000030; */
+}
+#debugCamera {
+    grid-area: 12 / 1 / 17 / 10;
+	pointer-events: none;
+	z-index: 1;
+}
+#pairCamera {
+	grid-area: 14 / 4 / 15 / 7;
+}
+#debugIncRoll {
+	grid-area: 17 / 1 / 19 / 10;
+	/* border: 1px solid #00000030; */
+}
+
+#qualReadoutsDown {
+	grid-area: 12 / 1 / 14 / 5;
+	display:flex;
+	flex-direction: column;
+	font-size: calc(var(--sqFontSize) * .3);
+}
+#qualReadotsForw {
+	grid-area: 12 / 6 / 14 / 10;
+	display:flex;
+	flex-direction: column;
+	font-size: calc(var(--sqFontSize) * .3);
+}
+
+
+#tableContainer {
+	grid-area: 1 / 1 / 6 / 10;
+	overflow: scroll;
+}
+#debugLedger {
+	display: table;
+	width: 100%;
+	max-height: 100%;
+	border-collapse: collapse;
+	/* border: 2px solid black; */
+	font-size: calc(var(--sqFontSize) * .2);
+
+}
+#debugLedger th, #debugLedger td {
+	border: 1px solid black;
+	padding: 10px;
+	text-align: left;
+	box-sizing: border-box;
+	vertical-align: top;
+	height: 10px;
+}
+#debugLedger tr td:nth-child(1) { width: 15%; }
+#debugLedger tr td:nth-child(2) { width: 70%; }
+#debugLedger tr td:nth-child(3) { width: 15%; }
+
+
+
+#test {
+	display: none;
+    grid-area: 1 / 7 / 5 / 10;
+    font-size: 8px;
+}
+
+
+
+/* #GPStemp {
+    font-size: 6px;
+    grid-area: 5 / 1 / 8 / 10;
+
+}
+#ACCtemp {
+    font-size: 6px;
+    grid-area: 8 / 1 / 15 / 10;
+} */
+
+</style>
+    <link rel="icon" href="../favicon.ico" type="image/x-icon">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="shortcut icon" type="image/x-icon" href="https://alexander-held.rf.gd/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="https://alexander-held.rf.gd/apple-touch-icon.png">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+
+</head>
+<header>
+    <nav id="topNav">
+        <a href="../web_sensors.html">Directory</a>
+        <h3>WIP V1.8</h3>
+        <button id="prevButton">prevButton</button>
+        <span id="curPage">curPage</span>
+        <button id="nextButton">nextButton</button>
+    </nav>
+</header>
+<body>
+<main>
+    <div class="primarySectionWrapper">
+        <div class="primarySection" id="Live">
+            <span id="calcSpeed">123</span><label for="calcSpeed" id="calcSpeedUnits">MPH</label>
+            <!-- <label for="calcHeading">Heading: </label> --><span id="calcHeading">NE</span>
+            <span id="horsepower">123</span><label for="horsepower" id="horsepowerUnits">HP</label>
+            <span id="temp">123</span><label for="temp" id="tempUnits">°f</label>
+            <span id="humidity">50</span><label for="humidity" id="humidityUnits">%</label>
+            <canvas id="tractionCircle" style="background-color: beige;"></canvas>
+
+        </div>
+        
+        <div class="primarySection" id="Settings">
+            <button id="pairButton">Pair</button>
+            <button id="saveRecordedButton" hidden>Save</button>
+
+            <button id="showAll">Show All Tabs</button>
+
+
+            <label for="gpsOffset" id="gpsOffsetLabel">gps offset millis:</label><input type="number" id="gpsOffset" min="0" step="1" value="500" max="10000" />
+            <!-- <label style="width:100%">TEST: <input type="number" id="" min="0"></label> -->
+            
+
+
+
+            <pre id="GPStemp"></pre>
+            <pre id="ACCtemp"></pre>
+
+            <!-- </div> -->
+        </div>
+        
+        <div class="primarySection" id="Debug">
+
+            <div id="tableContainer">
+            <table id="debugLedger">
+                <thead>
+                    <tr><th>Category</th><th>Description</th><th>Timestamp</th></tr>
+                </thead>
+            </table>
+            </div>
+
+            <div id="debugGraphSpeed"></div>
+            <div id="debugMotionAcc"></div>
+            <div id="debugMotionRot"></div>
+            <div id="debugIncRoll"></div>
+
+            <button id="pairCamera">Pair Camera</button>
+            <video id="debugCamera" width="380" height="200" autoplay muted playsinline></video>
+
+            <div id="qualReadoutsDown">
+                <label style="width:100%;">down setup  : <span id="downVecSetup">--</span></label>
+                <label style="width:100%;">down running: <span id="downVecRunning">--</span></label>
+                <label style="width:100%;">straightQual  : <span id="straightQual">--</span></label>
+            </div>
+            <div id="qualReadotsForw">
+                <label style="width:100%;">forw setup  : <span id="forwVecSetup">--</span></label>
+                <label style="width:100%;">forw running: <span id="forwVecRunning">--</span></label>
+            </div>
+            
+        </div>
+        
+        <div class="primarySection" id="Replayer">
+            <input type="file" id="replayUpload" accept=".json" value="file here" style="grid-area: 4 / 1 / 5 / 10"/>
+
+
+        </div>
+    </div>
+    </main>
+    
+    <!-- <footer></footer> placeholder -->
+
+    <script>
+(()=>{function xt(t){typeof DeviceMotionEvent.requestPermission=="function"?DeviceMotionEvent.requestPermission().then(e=>{e==="granted"?"DeviceMotionEvent"in window?window.addEventListener("devicemotion",t):alert("Motion not supported"):alert("Motion Permission denied")}):"DeviceMotionEvent"in window?window.addEventListener("devicemotion",t):alert("Motion not supported")}function yt(t){"DeviceMotionEvent"in window?window.removeEventListener("devicemotion",t):alert("Can't remove accel listner - not supported")}function ht(t,e){return"geolocation"in navigator?navigator.geolocation.watchPosition(t,e,{enableHighAccuracy:!0,maximumAge:0,timeout:5e3}):(alert("geolocation not supported"),null)}function wt(t){return typeof t!="number"?(alert("GPS disable when not set"),null):(navigator.geolocation.clearWatch(t),null)}function U(t,e,n,a=5e3){let i=document.getElementById(t),r=["red","green","blue","yellow","cyan","magenta"],x=e.map((p,l)=>({name:p,type:"line",showSymbol:!1,data:[],lineStyle:{color:r[l%r.length],width:1},smooth:!1})),s=echarts.init(i);s.setOption({animation:!1,backgroundColor:"#bbb",tooltip:{show:!1},grid:{show:!0,top:"5%",bottom:"5%",left:"8%",right:"5%",containLabel:!0},xAxis:{type:"time",show:!1},yAxis:{name:n,nameTextStyle:{color:"#000"},splitNumber:1,scale:!0,nameLocation:"middle",nameGap:0,axisLabel:{margin:20,formatter:p=>p.toFixed(1),fontFamily:"mono-space",color:"#000"}},series:x,graphic:[]});let c=e.map(()=>[]),o=e.map(()=>[]),u=r.slice(0,e.length);s._buffers=c,s._fullData=o,s._CHARTCUTOFF=a;let w=()=>{let p=e.map((l,y)=>{let Q=o[y].length?o[y][o[y].length-1][1]:null;return[{type:"text",left:"left",top:`${(y+1)*25}%`,style:{text:`${l}`,fill:u[y],textAlign:"right"}},{type:"text",left:"right",top:`${(y+1)*25}%`,style:{text:Q!==null?Q.toFixed(1):"N/A",font:"1em",fill:u[y],textAlign:"left"}}]}).flat();s.setOption({graphic:p})};return setInterval(()=>{let p=0;o.forEach(l=>{if(l.length){let y=l[l.length-1][0];y>p&&(p=y)}});for(let l=0;l<c.length;l++){let y=c[l];if(y.length){for(o[l].push(...y),c[l]=[];o[l].length&&o[l][0][0]<p-a;)o[l].shift();s.setOption({series:[{name:e[l],data:o[l]}]})}}w()},1e3/60),s.pushData=(p,l,y)=>{c[p].push([l,y])},s.setData=(p,l)=>{o[p]=l,c[p]=[],s.setOption({series:[{name:e[p],data:l}]})},s}async function vt(t){try{await navigator.mediaDevices.getUserMedia({video:!0,audio:!1});let a=(await navigator.mediaDevices.enumerateDevices()).filter(x=>x.kind==="videoinput").find(x=>x.label.toLowerCase().includes("back ultra wide camera"));if(!a)throw new Error("Back Ultra Wide Camera not found");let i=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:a.deviceId},width:{ideal:600},height:{ideal:380*3},frameRate:{ideal:60}}}),r=JSON.stringify(i.getVideoTracks()[0].getSettings(),null,2);document.getElementById(t).srcObject=i}catch(e){console.error(e),alert("Could not start 'Back Ultra Wide Camera':"+e.message)}}function D(t,e,n=Date.now(),a,i=-1){if(i>=0){let x=Date.now()-i;Array.from(a.rows).forEach(s=>{let c=s.cells[2];(c?Number(c.textContent):NaN)<x&&s.remove()})}let r=a.insertRow(1);r.insertCell().textContent=t,r.insertCell().textContent=e,r.insertCell().textContent=n}function it(t,e,n,a){let r=(t-n)*Math.PI/180,s=6371e3*((e-a)*Math.PI/180)*Math.cos(n*Math.PI/180),c=6371e3*r;return[s,c]}function rt(t,e,n){let a=t.latitude,i=t.longitude,r=it(t.latitude,t.longitude,a,i),x=it(e.latitude,e.longitude,a,i),s=it(n.latitude,n.longitude,a,i),c=[s[0]-r[0],s[1]-r[1]],o=[x[0]-r[0],x[1]-r[1]],u=Math.abs(c[0]*o[1]-c[1]*o[0]),w=Math.hypot(c[0],c[1]);return u/w}function Z(t){return{x:t.accelerationIncludingGravity.x-t.acceleration.x,y:t.accelerationIncludingGravity.y-t.acceleration.y,z:t.accelerationIncludingGravity.z-t.acceleration.z}}function St(t,e){return t.x+=e.x,t.y+=e.y,t.z+=e.z,t}function A(t){let e=t.x**2+t.y**2+t.z**2;return Math.sqrt(e)}function H(t,e){let n=0;return n+=(t.x-e.x)**2,n+=(t.y-e.y)**2,n+=(t.z-e.z)**2,Math.sqrt(n)}function Y(t){return[t.x,t.y,t.z]}function st(t){return{x:t[0],y:t[1],z:t[2]}}function j(t,e){let n=ot([-t.x,-t.y,-t.z]),a=ot([e.x,e.y,e.z]),i=ot(zt(a,n)),r=zt(n,i);return[[i[0],r[0],-n[0]],[i[1],r[1],-n[1]],[i[2],r[2],-n[2]]]}function ot(t){let e=Math.sqrt(t[0]**2+t[1]**2+t[2]**2);return e===0?{x:0,y:0,z:0}:[t[0]/e,t[1]/e,t[2]/e]}function zt(t,e){return[t[1]*e[2]-t[2]*e[1],t[2]*e[0]-t[0]*e[2],t[0]*e[1]-t[1]*e[0]]}function K(t){return[[t[0][0],t[1][0],t[2][0]],[t[0][1],t[1][1],t[2][1]],[t[0][2],t[1][2],t[2][2]]]}function tt(t,e){return[t[0][0]*e[0]+t[1][0]*e[1]+t[2][0]*e[2],t[0][1]*e[0]+t[1][1]*e[1]+t[2][1]*e[2],t[0][2]*e[0]+t[1][2]*e[1]+t[2][2]*e[2]]}function ct(t){return t*180/Math.PI}var et=class{constructor({alpha:e=.2}){this.alpha=e,this.value=null}update(e){return this.value==null?this.value=e:(this.value=this.alpha*e+(1-this.alpha)*this.value,this.value)}};function Et(t,e){return{timestamp:null,acceleration:{x:new t(e),y:new t(e),z:new t(e)},rotationRate:{x:new t(e),y:new t(e),z:new t(e)},accelerationIncludingGravity:{x:new t(e),y:new t(e),z:new t(e)}}}function Dt(t,e){return{timestamp:e.timestamp,acceleration:{x:t.acceleration.x.update(e.acceleration.x),y:t.acceleration.y.update(e.acceleration.y),z:t.acceleration.z.update(e.acceleration.z)},rotationRate:{x:t.rotationRate.x.update(e.rotationRate.x),y:t.rotationRate.y.update(e.rotationRate.y),z:t.rotationRate.z.update(e.rotationRate.z)},accelerationIncludingGravity:{x:t.accelerationIncludingGravity.x.update(e.accelerationIncludingGravity.x),y:t.accelerationIncludingGravity.y.update(e.accelerationIncludingGravity.y),z:t.accelerationIncludingGravity.z.update(e.accelerationIncludingGravity.z)}}}document.addEventListener("touchmove",t=>t.preventDefault(),{passive:!1});document.addEventListener("wheel",t=>t.preventDefault(),{passive:!1});var T=document.getElementById("pairButton"),bt=document.getElementById("saveRecordedButton"),Pt=document.getElementById("calcSpeed"),te=document.getElementById("calcHeading"),ee=document.getElementById("horsepower"),ne=document.getElementById("tractionCircle"),gt=!1,dt=!1,I=10*1e3,R=document.getElementById("debugLedger"),m=3;document.getElementById("pairCamera")?.addEventListener("click",()=>vt("debugCamera"));var J=0,nt=2.236936,Ct="exp",Gt={exp:et},Lt={exp:{alpha:.1}},h=[],Mt=[],C=[],lt=[],F=null,B=null,f={x:0,y:-1,z:0,setupQual:null,runningQual:1},g={x:0,y:0,z:-1,setupQual:null,runningQual:1};B=j(f,g);var b=U("debugMotionAcc",["x","y","z"],"v m/s"),P=U("debugMotionRot",["x","y","z"],"v deg/s"),k=U("debugGraphSpeed",["GPS","CALC"],"Speed *MPH"),G=U("debugIncRoll",["Incline","0","Roll"],"Incline Roll\xB0"),pt=document.getElementById("gpsOffset"),M=Number(localStorage.getItem("gpsOffset"))||500;pt.value=M;pt.addEventListener("change",()=>{M=Number(pt.value),localStorage.setItem("gpsOffset",M)});var at=Date.now(),ut=null;T.addEventListener("click",()=>{T.textContent=="Pair"?(gt=!1,ut=ht(Qt,Ot),xt(mt),T.textContent="Un-Pair"):(ut=wt(ut),yt(mt),T.textContent="Pair")});bt.addEventListener("click",()=>{let t=JSON.stringify({Options:{accIntervalHZ:F,Weight:0,DragCoef:1,RollResistance:2,FronalArea:3,startingTimeStamp:at},rawGPSarr:h,rawACCarr:Mt},null,2),n=`temp-${new Date().toISOString().replace(/[:.]/g,"-")}.json`,a=new Blob([t],{type:"application/json"}),i=URL.createObjectURL(a),r=document.createElement("a");r.href=i,r.download=n,r.click(),URL.revokeObjectURL(i)});var E=["Live","Settings","Debug","Replayer"],S=0;{let a=function(s,c){document.getElementById(E[s]).style.display="none",c<0?S=c+E.length:S=c%E.length,document.getElementById(E[S]).style.display="grid",n.textContent=E[S],t.textContent=E[(S+1)%E.length],e.textContent=E[S-1<0?S-1+E.length:S-1],E[c]=="Debug"&&(b.resize(),P.resize(),k.resize(),G.resize())},x=function(s=3e3){i.classList.add("showing"),requestAnimationFrame(()=>{i.classList.add("visible")}),clearTimeout(r),r=setTimeout(()=>{i.classList.remove("visible"),setTimeout(()=>{i.classList.remove("showing")},300)},s)},t=document.getElementById("nextButton"),e=document.getElementById("prevButton"),n=document.getElementById("curPage");t.addEventListener("click",()=>a(S,S+1)),e.addEventListener("click",()=>a(S,S-1)),a(0,0),window.addEventListener("resize",()=>{b.resize(),P.resize(),k.resize(),G.resize()});let i=document.getElementById("topNav"),r;document.addEventListener("click",s=>{s.clientY<window.innerHeight/5&&x()}),x()}document.getElementById("showAll").addEventListener("click",()=>{for(let t of E)document.getElementById(t).style.display="grid";dt=!dt,window.dispatchEvent(new Event("resize"))});var Bt=Et(Gt[Ct],Lt[Ct]);function mt(t){F===null&&(t.interval<1?F=1/t.interval:F=1e3/t.interval);let e={timestamp:t.timeStamp||t.timestamp,acceleration:{x:t.acceleration.x,y:t.acceleration.y,z:t.acceleration.z},rotationRate:{x:t.rotationRate.alpha||t.rotationRate.x,y:t.rotationRate.beta||t.rotationRate.y,z:t.rotationRate.gamma||t.rotationRate.z},accelerationIncludingGravity:{x:t.accelerationIncludingGravity.x,y:t.accelerationIncludingGravity.y,z:t.accelerationIncludingGravity.z}};Mt.push(e);let n=Dt(Bt,e);if(C.push(n),document.getElementById("ACCtemp").innerText=JSON.stringify(C[C.length-1],null,2),B===null){alert("null mounting matrix");return}let a=Z(n),i=tt(K(B),Y(a)),r=ct(Math.atan2(-i[1],i[2])),x=ct(Math.atan2(-i[0],i[2])),s=tt(K(B),Y(n.acceleration)),c=tt(K(B),Y(n.rotationRate)),o=st(s),u=st(c);if(o.x=-o.x,o.y=-o.y,o.z=-o.z,z.straightQual!==null&&z.straightQual<1.5){let w=C.find(p=>p.timestamp>=n.timestamp-M);H($(Z(w)),f)>.04?f.runningQual*=1.01:f.runningQual>1&&(f.runningQual-=.01),A(w.acceleration)>.3&&A(w.rotationRate)<20&&(Math.min(H($(o),{x:0,y:1,z:0}),H($(o),{x:0,y:-1,z:0}))>.04?g.runningQual*=1.01:g.runningQual>1&&(g.runningQual-=.01))}if((E[S]=="Debug"||dt)&&(G.pushData(0,n.timestamp,r),G.pushData(1,n.timestamp,0),G.pushData(2,n.timestamp,x),b.pushData(0,n.timestamp,o.x),b.pushData(1,n.timestamp,o.y),b.pushData(2,n.timestamp,o.z),P.pushData(0,n.timestamp,u.x),P.pushData(1,n.timestamp,u.y),P.pushData(2,n.timestamp,u.z)),document.getElementById("downVecSetup").textContent=f.setupQual?.toFixed(m),document.getElementById("downVecRunning").textContent=f.runningQual?.toFixed(m),document.getElementById("forwVecSetup").textContent=g.setupQual?.toFixed(m),document.getElementById("forwVecRunning").textContent=g.runningQual?.toFixed(m),document.getElementById("straightQual").textContent=z.straightQual?.toFixed(m),J+=o.y*nt/F,h.length>=1){let w=h.at(-1),p=w.timestamp-M,l=lt.findIndex(N=>N.timestamp>p),y=n.timestamp-at-w.timestamp,Q=.1;if(l>=0&&y<1500){let N=lt[l].speed,v=w.coords.speed*nt-N;J+=v/F*Q}}Pt.textContent=J.toFixed(0),lt.push({timestamp:n.timestamp,speed:J}),k.pushData(1,n.timestamp,J)}var z={Lidx:0,straightQual:null};function Qt(t){let e=JSON.stringify(g),n=JSON.stringify(f),a={timestamp:gt?t.timestamp:t.timestamp-at,coords:{latitude:t.coords.latitude,longitude:t.coords.longitude,altitude:t.coords.altitude,accuracy:t.coords.accuracy,altitudeAccuracy:t.coords.altitudeAccuracy,heading:t.coords.heading,speed:t.coords.speed}};document.getElementById("GPStemp").innerText=JSON.stringify(a,null,2);let i=10/nt;if(z.straightQual=null,a.coords.speed==null){z.Lidx=h.length;return}else a.coords.speed<i&&(z.Lidx=h.length);h.push(a),k.pushData(0,a.timestamp,a.coords.speed*nt);let r=z.Lidx,x=h.slice(r);if(!(x.length<3)){do{let s=1;for(let c of x){let o=c.coords,u=1;u*=o.accuracy/2,u*=o.altitudeAccuracy/3;let w=Math.abs(a.coords.altitude-o.altitude);u*=Math.max(1,(w*20/o.speed)**2);let p=rt(h[r].coords,o,a.coords);u*=Math.max(1,(p*10/o.speed)**2),s+=u}s/=h.length-r-2,(z.straightQual==null||s<z.straightQual)&&(z.Lidx=r,z.straightQual=s),r++,x=h.slice(r)}while(x.length>=3);t:{let s=C.findIndex(d=>d.timestamp>=h[z.Lidx].timestamp-M),c=C.findIndex(d=>d.timestamp>=h.at(-1).timestamp-M),o=(h.at(-1).timestamp-h[z.Lidx].timestamp)/1e3;if(c-s<F*o/1.34){D("GPS Mount",`smoothAccArr ITX len break - last:${c} first:${s}`,void 0,R,I);break t}let u={x:0,y:0,z:0,setupQual:0,runningQual:1};for(let d=s;d<=c;d++){let L=Z(C[d]);St(u,L),u.setupQual+=A(C[d].rotationRate)**2}let w=$(u);u.x=w.x,u.y=w.y,u.z=w.z,u.setupQual/=(c-s)*10,Math.random()<1/60&&D("GPS Mount",`Down Vec rotation: ${u.setupQual.toFixed(m)} gps: ${z.straightQual.toFixed(m)}`,void 0,R,I),u.setupQual+=z.straightQual,f.setupQual===null?(f=u,D("GPS Mount",`init Down Vec x:${f.x.toFixed(m)} y:${f.y.toFixed(m)} z:${f.z.toFixed(m)}`,void 0,R,I)):u.setupQual<f.setupQual*.9?(f=u,D("GPS Mount",`better setup Down Vec x:${f.x.toFixed(m)} y:${f.y.toFixed(m)} z:${f.z.toFixed(m)}`,void 0,R,I)):f.runningQual>100&&(u.setupQual*=1.2,f=u,D("GPS Mount",`running reset Down Vec x:${f.x.toFixed(m)} y:${f.y.toFixed(m)} z:${f.z.toFixed(m)}`,void 0,R,I));let p=.5,l=0,y=0,Q=0,O=0;for(let d=z.Lidx;d<h.length-1;d++)h[d+1].coords.speed-h[d].coords.speed>p*.6?(O++,O>Q&&(l=d-O,y=d,Q=O)):O=0;if(Q<=0)break t;let N=C.findIndex(d=>d.timestamp>=h[l].timestamp-M),ft=C.findIndex(d=>d.timestamp>=h[y].timestamp-M),v={x:0,y:0,z:0,setupQual:0,runningQual:1},q=C.slice(N,ft).filter(d=>A(d.acceleration)>=p);for(let d of q)v.x+=d.acceleration.x,v.y+=d.acceleration.y,v.z+=d.acceleration.z,v.setupQual+=A(d.rotationRate)**2;if(A(v)==0)break t;let X=$(v);v.x=X.x,v.y=X.y,v.z=X.z;let _=0;for(let d of q)_+=H($(d.acceleration),X)**.5;_/=q.length;let W=1;for(let d of h.slice(l,y)){let L=d.coords,V=1;V*=Math.max(1,L.accuracy/2),V*=Math.max(1,L.altitudeAccuracy/3);let At=Math.abs(a.coords.altitude-L.altitude);V*=Math.max(1,At**2);let Ft=rt(h[l].coords,L,h[y].coords);V*=Math.max(1,(Ft/L.speed)**2),W+=V}W/=y-l-2,v.setupQual/=q.length*10,Math.random()<1/60&&D("GPS Mount",`Forward vec rotation: ${v.setupQual.toFixed(m)} avgDist: ${_.toFixed(m)} gps: ${W.toFixed(m)}`,void 0,R,I),v.setupQual+=W,v.setupQual+=_,g.setupQual===null?(g=v,D("GPS Mount",`init Forward Vec x:${g.x.toFixed(m)} y:${g.y.toFixed(m)} z:${g.z.toFixed(m)}`,void 0,R,I)):g.setupQual<g.setupQual*.9?(g=v,D("GPS Mount",`better setup Forward Vec x:${g.x.toFixed(m)} y:${g.y.toFixed(m)} z:${g.z.toFixed(m)}`,void 0,R,I)):g.runningQual>100&&(v.setupQual*=1.2,g=v,D("GPS Mount",`running reset Forward Vec x:${g.x.toFixed(m)} y:${g.y.toFixed(m)} z:${g.z.toFixed(m)}`,void 0,R,I))}(e!==JSON.stringify(g)||n!==JSON.stringify(f))&&(B=j(f,g))}}function $(t){let e=A(t);return{x:t.x/e,y:t.y/e,z:t.z/e}}function Ot(t){alert(`GPS error: ${t.message}`)}window.onerror=function(t,e,n,a,i){window.alert(`Global error: ${t} at ${e}, ${n}, ${a}`)};var It=document.getElementById("replayUpload");replayUpload.value="";var Rt=0;function Tt(t,e,n=1){gt=!0;let a=++Rt,r=performance.now()-50*1e3;function x(){if(a!==Rt)return;let c=(performance.now()-r/n)*n,o=0,u=3e7;for(;o<u&&(t.length&&t[0].timestamp<=c||e.length&&e[0].timestamp<=c);){let w=t[0],p=e[0];!p||w&&w.timestamp<=p.timestamp?Qt(t.shift()):mt(e.shift()),o++}t.length||e.length?requestAnimationFrame(x):console.log("Replay finished")}requestAnimationFrame(x)}function $t(t,e=1){let n=t.Options,a=[...t.rawGPSarr],i=[...t.rawACCarr];F=n.accIntervalHZ,f={x:0,y:-1,z:0,setupQual:null,runningQual:1},g={x:0,y:0,z:-1,setupQual:null,runningQual:1},B=j(f,g),at=n.startingTimeStamp,b.setData(0,[]),b.setData(1,[]),b.setData(2,[]),P.setData(0,[]),P.setData(1,[]),P.setData(2,[]),k.setData(0,[]),k.setData(1,[]),G.setData(0,[]),G.setData(1,[]),G.setData(2,[]),Tt(a,i,e)}It&&It.addEventListener("change",function(t){let e=t.target.files[0];if(!e)return alert("file issue");T.textContent==="Un-Pair"&&T.click();let n=new FileReader;n.onload=function(a){try{let i=JSON.parse(a.target.result);$t(i,10)}catch(i){alert(`invalid JSON file: ${i}`)}},n.readAsText(e)});D("JS main","EOF main.js",void 0,R,I);})();
+
+</script>
+</body>
+</html>

@@ -2,15 +2,22 @@
 
 // TODO : test structured copy in parts
 
+await new Promise(resolve => {
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", resolve);
+    } else {
+        resolve(); // already loaded
+    }
+});
 
 import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, removeGPS } from "./pairing.js";
 import { debugChartInit, startDebugCamera, debugTableAdd } from "./debug.js";
 import { pointToLineDist, getGravity, addVectors, xyzMagnitude, xyzDistance, xyzToMatrix, matrixToXYZ, makeMountMatrix, matrixTranspose, applyRotationMatrix, radToDeg } from "./math.js";
 import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
-
+import { generateSmoothedAcc, updateSmoothedAcc } from "./objs/smoothedAccs.js"
+document.addEventListener("DOMContentLoaded", () => {});
 document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
-
 
 const pairButton = document.getElementById("pairButton");
 const saveButton = document.getElementById("saveRecordedButton");
@@ -21,26 +28,35 @@ const calcHeadingEl = document.getElementById("calcHeading");
 const horsepowerEl = document.getElementById("horsepower");
 const tractionCircleEl = document.getElementById("tractionCircle");
 
+const replayProgress = {
+    progressBar: document.getElementById("replayProgress"),
+    textValue: document.getElementById("replayProgressSpanValue"),
+    maxValue: document.getElementById("replayProgressSpanMax")
+};
+replayProgress.maxValue
 let replayMode = false;
+let debugMode = false;
 
 const debugTableCleanup = 10 * 1000;
 const debugTable = document.getElementById("debugLedger");
+const debugTableAcc = 3;
 
 document.getElementById("pairCamera")?.addEventListener("click", () => startDebugCamera("debugCamera"));
 
 let calcSpeed = 0;
 const meterPerSecToMilePerHourC = 2.236936;
 
+let smoothingSelection = "exp";
 const smoothingOptions = {
     "exp": ExponentialSmooth
 };
-let smoothingSelection = "exp";
-let smoothingSelectionVars = [ {alpha:0.1} ]; // exp -> lower = smoother  :  % approach of new value
+let smoothingSelectionVars = {
+    "exp": {alpha:0.1}
+};
 
 
 const rawGPSarr = [];
 const rawACCarr = [];
-const rawGYROarr = [];
 const smoothACCarr = [];
 const calcSpdArr = [];
 
@@ -58,8 +74,8 @@ let forwardVec = { x:0, y:0, z:-1, setupQual:null, runningQual:1 };
 
 mountingMatrix = makeMountMatrix(downVec, forwardVec);
 
-const debugMotionAcc = debugChartInit("debugMotionAcc", ["x", "y", "z"], "m/s");
-const debugMotionRot = debugChartInit("debugMotionRot", ["x", "y", "z"], "deg/s");
+const debugMotionAcc = debugChartInit("debugMotionAcc", ["x", "y", "z"], "v m/s");
+const debugMotionRot = debugChartInit("debugMotionRot", ["x", "y", "z"], "v deg/s");
 const debugSpeed = debugChartInit("debugGraphSpeed", ["GPS","CALC"], "Speed *MPH");
 const debugInclineRoll = debugChartInit("debugIncRoll", ["Incline","0","Roll"], "Incline Roll°");
 
@@ -193,26 +209,17 @@ pagesSetup: {
     });
     showTopNav();
 }
+document.getElementById("showAll").addEventListener("click", () => {
+    for (const e of pages) { document.getElementById(e).style.display = 'grid'; }
+    debugMode = !debugMode;
+    window.dispatchEvent(new Event("resize")); // trigger resize for hidden graphs
+});
 
 
-const smoothACCmethod = {
-    timestamp: null,
-    acceleration: {
-        x: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-        y: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-        z: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-    },
-    rotationRate: {
-        x: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-        y: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-        z: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-    },
-    accelerationIncludingGravity: {
-        x: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-        y: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-        z: new smoothingOptions[smoothingSelection]( smoothingSelectionVars[0] ),
-    }
-};
+
+
+
+const smoothACCmethod = generateSmoothedAcc(smoothingOptions[smoothingSelection], smoothingSelectionVars[smoothingSelection]);
 
 
 function accelHandler(event) {
@@ -251,26 +258,9 @@ function accelHandler(event) {
     };
     rawACCarr.push(rawACC);
 
-    const smoothACC = {
-        timestamp: rawACC.timestamp,
-        acceleration: {
-            x: smoothACCmethod.acceleration.x.update(rawACC.acceleration.x),
-            y: smoothACCmethod.acceleration.y.update(rawACC.acceleration.y),
-            z: smoothACCmethod.acceleration.z.update(rawACC.acceleration.z),
-        },
-        rotationRate: {
-            x: smoothACCmethod.rotationRate.x.update(rawACC.rotationRate.x),
-            y: smoothACCmethod.rotationRate.y.update(rawACC.rotationRate.y),
-            z: smoothACCmethod.rotationRate.z.update(rawACC.rotationRate.z),
-        },
-        accelerationIncludingGravity: {
-            x: smoothACCmethod.accelerationIncludingGravity.x.update(rawACC.accelerationIncludingGravity.x),
-            y: smoothACCmethod.accelerationIncludingGravity.y.update(rawACC.accelerationIncludingGravity.y),
-            z: smoothACCmethod.accelerationIncludingGravity.z.update(rawACC.accelerationIncludingGravity.z),
-        }
-    }
+
+    const smoothACC = updateSmoothedAcc(smoothACCmethod, rawACC);
     smoothACCarr.push(smoothACC);
-    // console.log(`${JSON.stringify(smoothACC, null,2)}`);
 
 
     document.getElementById("ACCtemp").innerText = JSON.stringify(smoothACCarr[smoothACCarr.length - 1], null, 2);
@@ -324,7 +314,7 @@ function accelHandler(event) {
         }
     }
     
-    if (pages[curPage] == "Debug") {
+    if (pages[curPage] == "Debug" || debugMode) {
         debugInclineRoll.pushData(0, smoothACC.timestamp, curPitch); // debugChartPushData(debugInclineRoll, 0, smoothACC.timestamp, curPitch);
         debugInclineRoll.pushData(1, smoothACC.timestamp, 0); // debugChartPushData(debugInclineRoll, 1, smoothACC.timestamp, 0); //  0 for reference line
         debugInclineRoll.pushData(2, smoothACC.timestamp, curRoll); // debugChartPushData(debugInclineRoll, 2, smoothACC.timestamp, curRoll);
@@ -339,40 +329,47 @@ function accelHandler(event) {
     }
 
     // TODO : remove once rough constants set - debug table should still give some rough idea 
-    document.getElementById("downVecSetup").textContent = downVec.setupQual;
-    document.getElementById("downVecRunning").textContent = downVec.runningQual;
-    document.getElementById("forwVecSetup").textContent = forwardVec.setupQual;
-    document.getElementById("forwVecRunning").textContent = forwardVec.runningQual;
-    document.getElementById("straightQual").textContent = flatSection.straightQual;
+    document.getElementById("downVecSetup").textContent = downVec.setupQual?.toFixed(debugTableAcc);
+    document.getElementById("downVecRunning").textContent = downVec.runningQual?.toFixed(debugTableAcc);
+    document.getElementById("forwVecSetup").textContent = forwardVec.setupQual?.toFixed(debugTableAcc);
+    document.getElementById("forwVecRunning").textContent = forwardVec.runningQual?.toFixed(debugTableAcc);
+    document.getElementById("straightQual").textContent = flatSection.straightQual?.toFixed(debugTableAcc);
     
     
     calcSpd: {
         calcSpeed += ((vehicleAcc.y * meterPerSecToMilePerHourC) / accIntervalHZ);
-        calcSpdArr.push({ timestamp: smoothACC.timestamp, speed: calcSpeed });
-
+        
         if (rawGPSarr.length >= 1) {
             const lastGPS = rawGPSarr.at(-1);
             const gpsTime = lastGPS.timestamp - gpsOffset;
-
+            
             const idx = calcSpdArr.findIndex(p => p.timestamp > gpsTime); // no need to account for accInterval ass when triggered latest gps will always be < latest accel / calcSpd
             
             const timeSinceGPS = smoothACC.timestamp - startingTimeStamp - lastGPS.timestamp; // not using date.now for replayer -> dif should only be a few millis
-
+            
             // if gps < min time -> nudge calc by gps,calc dist @ factor/sec
-            const calcSpdCorrectionFactor = 0.1; // closing rate of dif between gps and accel data /second
+            const calcSpdCorrectionFactor = 0.10; // closing rate of dif between gps and accel data /second
             const calcSpdCorrectionMinTime = 1500; // min recency of gps data for correction factor in millis
-
+            
             if (idx >= 0 && timeSinceGPS < calcSpdCorrectionMinTime) { // only apply correction if there is relevent data
                 const estSpeedAtGPS = calcSpdArr[idx].speed;
                 const gpsSpeed = lastGPS.coords.speed * meterPerSecToMilePerHourC;
                 const diff = gpsSpeed - estSpeedAtGPS;
-
+                
                 calcSpeed += (diff / accIntervalHZ) * calcSpdCorrectionFactor;
             }
         }
-
+        calcSpeedEl.textContent = calcSpeed.toFixed(0);
+        calcSpdArr.push({ timestamp: smoothACC.timestamp, speed: calcSpeed });
         debugSpeed.pushData(1, smoothACC.timestamp, calcSpeed); //debugChartPushData(debugSpeed, 1, smoothACC.timestamp, calcSpeed);
     }
+
+    
+    // tractionCircleEl
+    // function updateTractionCircle(tractionCircleRef, acc, pitch, roll, settings) {}
+
+    // function updateLeafletMap
+    // map.flyTo() based on expected location in 1 second?
 
     // debugTableAdd(`ACC Handler`, `smoothAcc len:${smoothACCarr.length}`, undefined, debugTable, debugTableCleanup);
 
@@ -484,22 +481,22 @@ function gpsHandler(position) {
         
         potentialDown.setupQual /= (lastAccITX-firstAccITX) * 10;
         if (Math.random() < 1/60) {
-            debugTableAdd(`GPS Mount`, `Down Vec rotation: ${potentialDown.setupQual} gps: ${flatSection.straightQual}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `Down Vec rotation: ${potentialDown.setupQual.toFixed(debugTableAcc)} gps: ${flatSection.straightQual.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         }
         potentialDown.setupQual += flatSection.straightQual;
 
         if (downVec.setupQual === null) {
             downVec = potentialDown;
-            debugTableAdd(`GPS Mount`, `init Down Vec x:${downVec.x.toFixed(2)} y:${downVec.y.toFixed(2)} z:${downVec.z.toFixed(2)}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `init Down Vec x:${downVec.x.toFixed(debugTableAcc)} y:${downVec.y.toFixed(debugTableAcc)} z:${downVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         } 
         else if (potentialDown.setupQual < downVec.setupQual * .9) {
             downVec = potentialDown;
-            debugTableAdd(`GPS Mount`, `better setup Down Vec x:${downVec.x.toFixed(2)} y:${downVec.y.toFixed(2)} z:${downVec.z.toFixed(2)}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `better setup Down Vec x:${downVec.x.toFixed(debugTableAcc)} y:${downVec.y.toFixed(debugTableAcc)} z:${downVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         }
         else if (downVec.runningQual > 100) {
             potentialDown.setupQual *= 1.2 // intentionally worse setupqual as running override will likely not have ideal setup on first try
             downVec = potentialDown;
-            debugTableAdd(`GPS Mount`, `running reset Down Vec x:${downVec.x.toFixed(2)} y:${downVec.y.toFixed(2)} z:${downVec.z.toFixed(2)}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `running reset Down Vec x:${downVec.x.toFixed(debugTableAcc)} y:${downVec.y.toFixed(debugTableAcc)} z:${downVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         }
 
             
@@ -542,6 +539,9 @@ function gpsHandler(position) {
             potentialForward.z += acc.acceleration.z;
             potentialForward.setupQual += xyzMagnitude(acc.rotationRate) ** 2 ;
         }
+        if (xyzMagnitude(potentialForward) == 0) {
+            break mounting;
+        }
         const meetsMinAccAvgNorm = xyzNormalize(potentialForward);
         potentialForward.x = meetsMinAccAvgNorm.x;
         potentialForward.y = meetsMinAccAvgNorm.y;
@@ -572,23 +572,23 @@ function gpsHandler(position) {
 
         potentialForward.setupQual /= (smoothACCmeetsMinAcc.length * 10);
         if (Math.random() < 1/60) {
-            debugTableAdd(`GPS Mount`, `Forward vec rotation: ${potentialForward.setupQual} avgDist: ${distFromAvgFactor} gps: ${forwardGPSstraightQual}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `Forward vec rotation: ${potentialForward.setupQual.toFixed(debugTableAcc)} avgDist: ${distFromAvgFactor.toFixed(debugTableAcc)} gps: ${forwardGPSstraightQual.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         }
         potentialForward.setupQual += forwardGPSstraightQual;
         potentialForward.setupQual += distFromAvgFactor;
 
         if (forwardVec.setupQual === null) {
             forwardVec = potentialForward;
-            debugTableAdd(`GPS Mount`, `init Forward Vec x:${forwardVec.x.toFixed(2)} y:${forwardVec.y.toFixed(2)} z:${forwardVec.z.toFixed(2)}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `init Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         } 
         else if (forwardVec.setupQual < forwardVec.setupQual * .9) {
             forwardVec = potentialForward;
-            debugTableAdd(`GPS Mount`, `better setup Forward Vec x:${forwardVec.x.toFixed(2)} y:${forwardVec.y.toFixed(2)} z:${forwardVec.z.toFixed(2)}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `better setup Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         }
         else if (forwardVec.runningQual > 100) {
             potentialForward.setupQual *= 1.2 // intentionally worse setupqual as running override will likely not have ideal setup on first try
             forwardVec = potentialForward;
-            debugTableAdd(`GPS Mount`, `running reset Forward Vec x:${forwardVec.x.toFixed(2)} y:${forwardVec.y.toFixed(2)} z:${forwardVec.z.toFixed(2)}`, undefined, debugTable, debugTableCleanup);
+            debugTableAdd(`GPS Mount`, `running reset Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
         }
 
 
@@ -639,7 +639,7 @@ function startReplay(fileGPSarr, fileACCarr, speedScale = 1.0) {
         const curReplayTime = elapsed * speedScale;
 
         let processed = 0;
-        const MAX_PER_FRAME = 30000;
+        const MAX_PER_FRAME = 30000000;
 
         while (processed < MAX_PER_FRAME &&
                ((fileGPSarr.length && fileGPSarr[0].timestamp <= curReplayTime) ||
@@ -658,6 +658,10 @@ function startReplay(fileGPSarr, fileACCarr, speedScale = 1.0) {
         }
 
         if (fileGPSarr.length || fileACCarr.length) {
+            const ts = Number(rawACCarr.at(-1)?.timestamp ?? 0);
+            replayProgress.progressBar.value = isFinite(ts) ? ts : 0;
+            replayProgress.textValue.textContent = milliToStrTime(isFinite(ts) ? ts : 0);
+
             requestAnimationFrame(loop);
         } else {
             console.log("Replay finished");
@@ -672,13 +676,20 @@ function initReplayFromData(jsonData, speedScale = 1.0) {
     const options = jsonData.Options;
     const fileGPSarr = [...jsonData.rawGPSarr];
     const fileACCarr = [...jsonData.rawACCarr];
-
+    
     // reset live / previous modified state
+    rawGPSarr.length = 0;
+    rawACCarr.length = 0;
+    smoothACCarr.length = 0;
+    calcSpdArr.length = 0;
     accIntervalHZ = options.accIntervalHZ;
     downVec = { x:0, y:-1, z:0, setupQual:null, runningQual:1 };
     forwardVec = { x:0, y:0, z:-1, setupQual:null, runningQual:1 };
     mountingMatrix = makeMountMatrix(downVec, forwardVec);
     startingTimeStamp = options.startingTimeStamp;
+
+    replayProgress.progressBar.max = fileACCarr.at(-1)?.timestamp;
+    replayProgress.maxValue.textContent = milliToStrTime(fileACCarr.at(-1)?.timestamp);
 
     // clear debug charts
     debugMotionAcc.setData(0, []); debugMotionAcc.setData(1, []); debugMotionAcc.setData(2, []);
@@ -711,5 +722,18 @@ basicReplayer: {
     }
 }
 
-debugTableAdd("JS main", "EOF main.js", undefined, debugTable, debugTableCleanup);
+function milliToStrTime(milli) {
+    if (isNaN(milli)) { return "_"; }
 
+    let totalSeconds = Math.floor(milli / 1000);
+    let hours = Math.floor(totalSeconds / 3600);
+    let minutes = Math.floor((totalSeconds % 3600) / 60);
+    let seconds = totalSeconds % 60;
+    const pad = n => String(n).padStart(2, "0");
+    if (hours == 0) {
+        return `${pad(minutes)}:${pad(seconds)}`;
+    }
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+debugTableAdd("JS main", "EOF main.js", undefined, debugTable, debugTableCleanup);

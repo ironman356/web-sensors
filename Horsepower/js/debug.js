@@ -5,7 +5,7 @@
 export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 5000) {
     const chartEl = document.getElementById(chartElId);
 
-    const colors = ["red","green","blue","yellow","cyan","magenta"];
+    const colors = ["red", "green", "blue", "yellow", "cyan", "magenta"];
     const series = lineLabels.map((label, i) => ({
         name: label,
         type: 'line',
@@ -18,32 +18,80 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
     const chart = echarts.init(chartEl);
     chart.setOption({
         animation: false,
+        backgroundColor: '#bbb',
         tooltip: { show: false },
         grid: {
+            show: true,
             top: '5%',
             bottom: '5%',
-            left: '5%',
+            left: '8%',
             right: '5%',
             containLabel: true
         },
         xAxis: { type: 'time', show: false },
         yAxis: {
             name: yAxisLabel,
+            nameTextStyle: {
+                color: '#000',
+            },
+            splitNumber: 1,
             scale: true,
-            nameLocation: 'middle',    // 'start', 'middle', 'end'
-            nameGap: 0,               // distance from axis line
-            nameTextStyle: { fontSize: 12 },
-            axisLabel: { margin: 30 }
+            nameLocation: "middle",
+            nameGap: 0,
+            axisLabel: {
+                margin: 20,
+                formatter: value => value.toFixed(1),
+                fontFamily: 'mono-space',
+                color: '#000'
+            },
         },
-        series
+        series,
+        graphic: []  // for dynamic text labels
     });
 
     const buffers = lineLabels.map(() => []);
     const fullData = lineLabels.map(() => []);
+    const lineColors = colors.slice(0, lineLabels.length);
 
     chart._buffers = buffers;
     chart._fullData = fullData;
     chart._CHARTCUTOFF = CHARTCUTOFF;
+
+    const updateText = () => {
+        const graphicOptions = lineLabels.map((label, i) => {
+            const lastValue = fullData[i].length ? fullData[i][fullData[i].length - 1][1] : null;
+
+            return [
+                // left side label (line label)
+                {
+                    type: 'text',
+                    left: 'left',
+                    top: `${(i + 1) * 25}%`,  //  vertical position
+                    style: {
+                        text: `${label}`,
+                        fill: lineColors[i],
+                        textAlign: 'right'
+                    }
+                },
+                // right side current value
+                {
+                    type: 'text',
+                    left: 'right',
+                    top: `${(i + 1) * 25}%`,  // vertical position for each label
+                    style: {
+                        text: lastValue !== null ? lastValue.toFixed(1) : 'N/A',
+                        font: '1em',
+                        fill: lineColors[i],
+                        textAlign: 'left'
+                    }
+                }
+            ];
+        }).flat();  // flatten the array since we have two elements per line (left and right)
+
+        chart.setOption({
+            graphic: graphicOptions
+        });
+    };
 
     setInterval(() => {
         let newestTimestamp = 0;
@@ -74,8 +122,10 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
                 });
             }
         }
-    }, 1000 / 60); // 60hz
 
+        updateText();  // displaying the latest values
+    }, 1000 / 60); // 60hz
+    
     chart.pushData = (seriesIndex, timestamp, value) => {
         buffers[seriesIndex].push([timestamp, value]);
     };
@@ -93,6 +143,7 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
 
     return chart;
 }
+
 
 
 
