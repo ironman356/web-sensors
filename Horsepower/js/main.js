@@ -2,6 +2,15 @@
 
 // TODO : test structured copy in parts
 
+
+import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, removeGPS } from "./pairing.js";
+import { debugChartInit, startDebugCamera, debugTableAdd } from "./debug.js";
+import { pointToLineDist, getGravity, addVectors, xyzMagnitude, xyzDistance, xyzToMatrix, matrixToXYZ, makeMountMatrix, matrixTranspose, applyRotationMatrix, radToDeg } from "./math.js";
+import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
+import { generateSmoothedAcc, updateSmoothedAcc } from "./objs/smoothedAccs.js"
+
+
+
 await new Promise(resolve => {
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", resolve);
@@ -10,12 +19,6 @@ await new Promise(resolve => {
     }
 });
 
-import { pairOrientation, removeOrientation, pairMotion, removeMotion, pairGPS, removeGPS } from "./pairing.js";
-import { debugChartInit, startDebugCamera, debugTableAdd } from "./debug.js";
-import { pointToLineDist, getGravity, addVectors, xyzMagnitude, xyzDistance, xyzToMatrix, matrixToXYZ, makeMountMatrix, matrixTranspose, applyRotationMatrix, radToDeg } from "./math.js";
-import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
-import { generateSmoothedAcc, updateSmoothedAcc } from "./objs/smoothedAccs.js"
-document.addEventListener("DOMContentLoaded", () => {});
 document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
 
@@ -467,13 +470,17 @@ function gpsHandler(position) {
         }
         
         /** @type {downVec} */
-        let potentialDown = { x:0, y:0, z:0, setupQual:0, runningQual:1 }; // point amt not setup b/c gps still static 3 point
+        let potentialDown = { x:0, y:0, z:0, setupQual:0, runningQual:1 };
+
+        // const potDownVecList_debug = []
         
         for ( let i = firstAccITX; i <= lastAccITX; i++ ) {
             const grav = getGravity(smoothACCarr[i]);
             addVectors(potentialDown, grav); // potentialdown += gravity (xyz)
+            // potDownVecList_debug.push(grav);
             potentialDown.setupQual += xyzMagnitude(smoothACCarr[i].rotationRate) ** 2 ;
         }
+        
         const potentialDownAvgNorm = xyzNormalize(potentialDown);
         potentialDown.x = potentialDownAvgNorm.x;
         potentialDown.y = potentialDownAvgNorm.y;
@@ -488,15 +495,18 @@ function gpsHandler(position) {
         if (downVec.setupQual === null) {
             downVec = potentialDown;
             debugTableAdd(`GPS Mount`, `init Down Vec x:${downVec.x.toFixed(debugTableAcc)} y:${downVec.y.toFixed(debugTableAcc)} z:${downVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
+            // console.log(potDownVecList_debug);
         } 
         else if (potentialDown.setupQual < downVec.setupQual * .9) {
             downVec = potentialDown;
             debugTableAdd(`GPS Mount`, `better setup Down Vec x:${downVec.x.toFixed(debugTableAcc)} y:${downVec.y.toFixed(debugTableAcc)} z:${downVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
+            // console.log(potDownVecList_debug);
         }
         else if (downVec.runningQual > 100) {
             potentialDown.setupQual *= 1.2 // intentionally worse setupqual as running override will likely not have ideal setup on first try
             downVec = potentialDown;
             debugTableAdd(`GPS Mount`, `running reset Down Vec x:${downVec.x.toFixed(debugTableAcc)} y:${downVec.y.toFixed(debugTableAcc)} z:${downVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
+            // console.log(potDownVecList_debug);
         }
 
             
@@ -530,6 +540,8 @@ function gpsHandler(position) {
         /** @type {forwardVec} */
         let potentialForward = { x:0, y:0, z:0, setupQual:0, runningQual:1 };
         
+        const potForwVecList_debug = [];
+
         const rawCopySmoothACCarr = smoothACCarr.slice(firstAccITXincGPS, lastAccITXincGPS);
         const smoothACCmeetsMinAcc = rawCopySmoothACCarr.filter(obj => xyzMagnitude(obj.acceleration) >= forwardVecMinAcc); // keep points >= minAcc
         // TODO?: remove points w/ too much rotation..?
@@ -538,6 +550,7 @@ function gpsHandler(position) {
             potentialForward.y += acc.acceleration.y;
             potentialForward.z += acc.acceleration.z;
             potentialForward.setupQual += xyzMagnitude(acc.rotationRate) ** 2 ;
+            potForwVecList_debug.push(acc.acceleration)
         }
         if (xyzMagnitude(potentialForward) == 0) {
             break mounting;
@@ -580,19 +593,22 @@ function gpsHandler(position) {
         if (forwardVec.setupQual === null) {
             forwardVec = potentialForward;
             debugTableAdd(`GPS Mount`, `init Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
+            console.log(potForwVecList_debug);
         } 
         else if (forwardVec.setupQual < forwardVec.setupQual * .9) {
             forwardVec = potentialForward;
             debugTableAdd(`GPS Mount`, `better setup Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
+            console.log(potForwVecList_debug);
         }
         else if (forwardVec.runningQual > 100) {
             potentialForward.setupQual *= 1.2 // intentionally worse setupqual as running override will likely not have ideal setup on first try
             forwardVec = potentialForward;
             debugTableAdd(`GPS Mount`, `running reset Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
+            console.log(potForwVecList_debug);        
         }
 
-
-    }
+    } // end of mounting
+    
     if (origForwardVec !== JSON.stringify(forwardVec) || origDownVec !== JSON.stringify(downVec)) {
         // debugTableAdd(`Mounting Matrix`, `new Mounting matrix made`, undefined, debugTable, debugTableCleanup);
         mountingMatrix = makeMountMatrix(downVec, forwardVec);
@@ -630,7 +646,7 @@ function startReplay(fileGPSarr, fileACCarr, speedScale = 1.0) {
 
     const skipStart = 50; //seconds
 
-    const replayStart = performance.now() - skipStart * 1000;
+    const replayStart = performance.now() - skipStart * 1000 - fileACCarr.at(0).timestamp; // timestamp for cases where pair time 
 
     function loop() {
         if (replayId !== currentReplayId) return;

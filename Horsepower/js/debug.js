@@ -1,7 +1,6 @@
 
 
 
-
 export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 5000) {
     const chartEl = document.getElementById(chartElId);
 
@@ -143,11 +142,6 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
 
     return chart;
 }
-
-
-
-
-
 
 
 
