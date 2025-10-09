@@ -10,26 +10,189 @@ import { AdaptiveKalman, ExponentialSmooth } from "./filter.js";
 import { generateSmoothedAcc, updateSmoothedAcc } from "./objs/smoothedAccs.js"
 
 
-
+// wait for dom to prevent some weird startup errors
 await new Promise(resolve => {
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", resolve);
-    } else {
-        resolve(); // already loaded
-    }
+  if (document.readyState === "complete") resolve();
+  else window.addEventListener("load", resolve);
 });
 
-document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
-document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
+// -=-=-=-=-=- IN PRODUCTION -=-=-=-=-=- =========================================================================
 
-const pairButton = document.getElementById("pairButton");
+function drawBaseCircles(ctx, paddingPx, innerRings=0, alpha) {
+
+    if (ctx.canvas.width < 50 || ctx.canvas.height < 50) {
+        return;
+    }
+    
+    ctx.save();
+    const cenX = ctx.canvas.width / 2;
+    const cenY = ctx.canvas.height / 2
+    
+    ctx.fillStyle = `rgba(128, 128, 128, ${alpha})`;
+    ctx.lineWidth = 4;
+    const outerRadius = cenX - (ctx.lineWidth / 2) - paddingPx;
+    ctx.beginPath();
+    ctx.arc(cenX, cenY, outerRadius, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+
+    const ringSpacing = outerRadius / (innerRings+1);
+    for (let i = 0; i < innerRings; i++) {
+        ctx.beginPath();
+        ctx.arc(cenX, cenY, ringSpacing * (i+1), 0, Math.PI*2);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function getEndPoints(yInt, slope, cirMid, radius) {
+    /**
+     * y=mx+b - line formula, (x-h)^2 + (y-k)^2 = r^2 - circle formula
+     * subbing line formula into y of circle formula and rearranged gives
+     * x^2(1+m^2) + x(-2h+2mb-2mk) + (h^2+b^2+k^2-r^2-2bk) = 0
+     * from which quadratic equation can be used to find x in line formula
+     */
+    const A = 1 + slope ** 2;
+    const B = -2 * cirMid[0] + 2 * slope * yInt - 2 * slope * cirMid[1];
+    const C = cirMid[0] ** 2 + yInt ** 2 + cirMid[1] ** 2 - radius ** 2 - 2 * yInt * cirMid[1]; 
+    const inRoot = B ** 2 - 4 * A * C;
+    // console.log(inRoot)
+    if (inRoot < 0) {
+        return [null, null];
+    }
+    const x1 = (-B + Math.sqrt(inRoot)) / (2 * A);
+    const y1 = slope * x1 + yInt;
+    const x2 = (-B - Math.sqrt(inRoot)) / (2 * A);
+    const y2 = slope * x2 + yInt;
+
+    return [[x1, y1], [x2, y2]];
+}
+
+
+function degToRad(deg) {
+    return deg * Math.PI / 180;
+}
+
+
+// const tractionCirNumRingsEl = document.getElementById();
+
+function tractionCirDrawer(tractionCirEl, settings, fontSize = 24) {
+    const ctx = tractionCirEl.getContext("2d");
+
+    const trailLength = 200;
+    let trail = [];
+
+    const resizeCanvas = () => {
+        tractionCirEl.width = tractionCirEl.clientWidth;
+        tractionCirEl.height = tractionCirEl.clientHeight;
+        drawBaseCircles(ctx, 30, 2, 1);
+    };
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const updateDisplay = (acc, pitch, roll) => {
+        const { showPitchRoll, showNumbers } = settings;
+        const canvasSize = tractionCirEl.width; // square canvas
+        const edgePadding = 0;
+        const numberPadding = showNumbers ? fontSize * 2 : 0; // extra space for numbers
+        const outerRadius = (canvasSize / 2) - edgePadding - numberPadding;
+        const cenX = canvasSize / 2;
+        const cenY = canvasSize / 2;
+
+        ctx.clearRect(0, 0, canvasSize, canvasSize);
+        drawBaseCircles(ctx, edgePadding + numberPadding, 2, 0.33);
+
+        // Update trail
+        trail.push({ x: acc.x, y: acc.y, z: acc.z });
+        if (trail.length > trailLength) trail.shift();
+
+        // Draw trail points
+        trail.forEach((p, i) => {
+            const alpha = (i + 1) / trailLength;
+            const x = cenX + (p.x / 5) * (outerRadius - 10);
+            const y = cenY - (p.y / 5) * (outerRadius - 10);
+            const r = (p.z + 5) * 2;
+
+            ctx.beginPath();
+            ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+            ctx.arc(x, y, r, 0, Math.PI*2);
+            ctx.fill();
+        });
+
+        // Pitch/Roll line
+        if (showPitchRoll) {
+            const slope = Math.tan(-degToRad(roll));
+            const yInt = Math.tan(degToRad(pitch)) * outerRadius / Math.tan(degToRad(45));
+            const [p1, p2] = getEndPoints(yInt, slope, [0, 0], outerRadius);
+            if (p1 && p2) {
+                ctx.beginPath();
+                ctx.strokeStyle = "rgba(0,128,50,1)";
+                ctx.lineWidth = 4;
+                ctx.moveTo(p1[0]+cenX, p1[1]+cenY);
+                ctx.lineTo(p2[0]+cenX, p2[1]+cenY);
+                ctx.stroke();
+            }
+        }
+
+        // Numeric display outside circle
+        if (showNumbers) {
+            ctx.fillStyle = "white";
+            ctx.font = `${fontSize}px monospace`;
+            ctx.textBaseline = "middle";
+
+            // Y top/bottom
+            ctx.textAlign = "center";
+            ctx.fillText(acc.y > 0 ? acc.y.toFixed(1) : "0.0", cenX, cenY - outerRadius - numberPadding / 2);
+            ctx.fillText(acc.y < 0 ? Math.abs(acc.y).toFixed(1) : "0.0", cenX, cenY + outerRadius + numberPadding / 2);
+
+            // X left/right
+            ctx.fillText(acc.x < 0 ? Math.abs(acc.x).toFixed(1) : "0.0", cenX - outerRadius - numberPadding / 2, cenY);
+            ctx.fillText(acc.x > 0 ? acc.x.toFixed(1) : "0.0", cenX + outerRadius + numberPadding / 2, cenY);
+
+            // Z top-right / bottom-right towards corners
+            ctx.textAlign = "right";
+            ctx.fillText(acc.z > 0 ? acc.z.toFixed(1) : "0.0", canvasSize - numberPadding / 2, numberPadding / 2);
+            ctx.fillText(acc.z < 0 ? Math.abs(acc.z).toFixed(1) : "0.0", canvasSize - numberPadding / 2, canvasSize - numberPadding / 2);
+
+            // Pitch/Roll top-left corner with labels
+            if (showPitchRoll) {
+                ctx.textAlign = "left";
+                ctx.fillText(`Pitch: ${pitch.toFixed(1)}`, 2, fontSize);
+                ctx.fillText(`Roll: ${roll.toFixed(1)}`, 2, fontSize * 2 + 4);
+            }
+        }
+    };
+
+    return { updateDisplay, resizeCanvas };
+}
+
+
+
+
+
+
+
+
+
+// -=-=-=-=-=- IN PRODUCTION -=-=-=-=-=- =========================================================================
+
+
+// document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+// document.addEventListener('wheel', e => e.preventDefault(), { passive: false });
+
+const pairButtonEl = document.getElementById("pairButton");
 const saveButton = document.getElementById("saveRecordedButton");
+
 
 // "final" items
 const calcSpeedEl = document.getElementById("calcSpeed");
 const calcHeadingEl = document.getElementById("calcHeading");
 const horsepowerEl = document.getElementById("horsepower");
 const tractionCircleEl = document.getElementById("tractionCircle");
+
+
+const tractionCir = tractionCirDrawer(tractionCircleEl, { "showPitchRoll":true, "showNumbers":true });
+tractionCircleEl.addEventListener("click", () => { if(pairButtonEl.textContent === "Pair") pairButtonEl.click();} );
 
 const replayProgress = {
     progressBar: document.getElementById("replayProgress"),
@@ -97,15 +260,15 @@ let startingTimeStamp = Date.now(); // -> replayer currently can change this req
 
 // - - pairing sensors - -
 let geoWatchId = null;
-pairButton.addEventListener("click", () => {
+pairButtonEl.addEventListener("click", () => {
 
     // pair / enable everything
-    if (pairButton.textContent == "Pair") {
+    if (pairButtonEl.textContent == "Pair") {
         replayMode = false;
         geoWatchId = pairGPS(gpsHandler, onGPSError);
         pairMotion(accelHandler);
         // pairOrientation(gyroHandler);        
-        pairButton.textContent = "Un-Pair";
+        pairButtonEl.textContent = "Un-Pair";
     }
 
     // un-pair / disable everything
@@ -114,7 +277,7 @@ pairButton.addEventListener("click", () => {
         geoWatchId = removeGPS(geoWatchId);
         removeMotion(accelHandler);
         // removeOrientation(gyroHandler);
-        pairButton.textContent = "Pair";
+        pairButtonEl.textContent = "Pair";
     }
 });
 
@@ -125,6 +288,7 @@ saveButton.addEventListener("click", () => {
     const jsonStr = JSON.stringify({
         Options: {
             accIntervalHZ: accIntervalHZ,
+            gpsOffset: gpsOffset,
             Weight: 0,
             DragCoef: 1,
             RollResistance: 2,
@@ -151,32 +315,96 @@ saveButton.addEventListener("click", () => {
 
 const pages = ["Live", "Settings", "Debug", "Replayer"];
 let curPage = 0;
+
 pagesSetup: {
     const nextButtonEl = document.getElementById("nextButton");
     const prevButtonEl = document.getElementById("prevButton");
     const curPageEl = document.getElementById("curPage");
+    const showAllBtn = document.getElementById("showAll");
+    const togglesContainer = document.getElementById("pageToggles");
 
+    function setVisiblePages() {
+        for (const p of pages) {
+            const el = document.getElementById(p);
+            const box = document.getElementById(`toggle-${p}`);
+            el.style.display = box.checked ? "grid" : "none";
+        }
+    }
 
+    function ensureAtLeastOneVisible() {
+        const visible = pages.filter(p => getComputedStyle(document.getElementById(p)).display !== "none");
+        if (visible.length === 0) changePage(curPage, curPage); // ensure one visible
+    }
 
     function changePage(current, desired) {
-        document.getElementById(pages[current]).style.display = 'none';
-        ((desired) < 0) ? curPage = desired+pages.length : curPage = desired % pages.length;
-        document.getElementById(pages[curPage]).style.display = 'grid';
+        // hide all
+        for (const p of pages) document.getElementById(p).style.display = "none";
+        // cycle desired
+        ((desired) < 0) ? curPage = desired + pages.length : curPage = desired % pages.length;
+        document.getElementById(pages[curPage]).style.display = "grid";
+        // sync checkboxes
+        for (const p of pages)
+            document.getElementById(`toggle-${p}`).checked = (p === pages[curPage]);
 
         curPageEl.textContent = pages[curPage];
-        nextButtonEl.textContent = pages[(curPage+1) % pages.length];
-        prevButtonEl.textContent = pages[curPage-1 < 0 ? curPage-1 + pages.length : curPage-1];
+        nextButtonEl.textContent = pages[(curPage + 1) % pages.length];
+        prevButtonEl.textContent = pages[curPage - 1 < 0 ? curPage - 1 + pages.length : curPage - 1];
 
-        if (pages[desired] == "Debug") {
+        if (pages[curPage] == "Debug") {
             debugMotionAcc.resize();
             debugMotionRot.resize();
             debugSpeed.resize();
             debugInclineRoll.resize();
         }
+        tractionCir.resizeCanvas();
     }
-    nextButtonEl.addEventListener("click", () => changePage(curPage, curPage+1));
-    prevButtonEl.addEventListener("click", () => changePage(curPage, curPage-1));
-    changePage(0,0); // inital setup
+
+    nextButtonEl.addEventListener("click", () => { changePage(curPage, curPage + 1); });
+    prevButtonEl.addEventListener("click", () => { changePage(curPage, curPage - 1); });
+    
+
+    // Build checkboxes for each page
+    for (const p of pages) {
+        const label = document.createElement("label");
+        const box = document.createElement("input");
+        box.type = "checkbox";
+        box.id = `toggle-${p}`;
+        box.checked = (p === pages[curPage]);
+        box.addEventListener("change", () => {
+            setVisiblePages();
+            ensureAtLeastOneVisible();
+        });
+        label.appendChild(box);
+        label.append(" " + p);
+        togglesContainer.appendChild(label);
+    }
+
+    // Show/Hide All
+    showAllBtn.addEventListener("click", () => {
+        const allHidden = pages.every(p => getComputedStyle(document.getElementById(p)).display === "none");
+        const allVisible = pages.every(p => getComputedStyle(document.getElementById(p)).display !== "none");
+
+        if (!allVisible) {
+            for (const p of pages) {
+                document.getElementById(p).style.display = "grid";
+                document.getElementById(`toggle-${p}`).checked = true;
+            }
+            showAllBtn.textContent = "Hide Tabs";
+            window.dispatchEvent(new Event("resize"));
+        } else {
+            for (const p of pages) {
+                document.getElementById(p).style.display = "none";
+                document.getElementById(`toggle-${p}`).checked = false;
+            }
+            changePage(curPage, curPage); // ensure 1 visible
+            showAllBtn.textContent = "Show Tabs";
+        }
+    });
+
+    const mq = window.matchMedia("(min-width: 1500px)");
+    if (mq.matches) {
+        setTimeout(() => showAllBtn.click(), 10);
+    }
 
     window.addEventListener("resize", () => {
         debugMotionAcc.resize();
@@ -185,38 +413,29 @@ pagesSetup: {
         debugInclineRoll.resize();
     });
 
-
-
     const topNav = document.getElementById("topNav");
     let hideTimeout;
 
     function showTopNav(duration = 3000) {
         topNav.classList.add("showing");
-
-        requestAnimationFrame(() => {
-        topNav.classList.add("visible");
-        });
-
+        requestAnimationFrame(() => topNav.classList.add("visible"));
         clearTimeout(hideTimeout);
         hideTimeout = setTimeout(() => {
-        topNav.classList.remove("visible");
-
-        setTimeout(() => {
-            topNav.classList.remove("showing");
-        }, 300); // Must match CSS transition duration
+            topNav.classList.remove("visible");
+            setTimeout(() => topNav.classList.remove("showing"), 300);
         }, duration);
     }
 
     document.addEventListener("click", (e) => {
-    if (e.clientY < window.innerHeight / 5) {showTopNav();}
+        if (topNav.contains(e.target)) return;
+        if (e.target.tagName.toLowerCase() === "select") return;
+        if (e.clientY < window.innerHeight / 5) showTopNav();
     });
+
+    changePage(0, 0);
     showTopNav();
 }
-document.getElementById("showAll").addEventListener("click", () => {
-    for (const e of pages) { document.getElementById(e).style.display = 'grid'; }
-    debugMode = !debugMode;
-    window.dispatchEvent(new Event("resize")); // trigger resize for hidden graphs
-});
+
 
 
 
@@ -266,7 +485,6 @@ function accelHandler(event) {
     smoothACCarr.push(smoothACC);
 
 
-    document.getElementById("ACCtemp").innerText = JSON.stringify(smoothACCarr[smoothACCarr.length - 1], null, 2);
 
 
     if (mountingMatrix === null) {
@@ -275,8 +493,13 @@ function accelHandler(event) {
     }
     const grav = getGravity(smoothACC);
     const grav_deviation = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(grav));
-    const curPitch = radToDeg(Math.atan2(-grav_deviation[1], grav_deviation[2]));
-    const curRoll = radToDeg(Math.atan2(-grav_deviation[0], grav_deviation[2]));
+    // console.log(grav_deviation);
+    const gx = grav_deviation[0];
+    const gy = grav_deviation[1];
+    const gz = grav_deviation[2];
+
+    const curPitch = radToDeg(Math.atan2(gy, -gz));
+    const curRoll  = radToDeg(Math.atan2(-gx, -gz));
 
     const vehicleAccMat = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(smoothACC.acceleration));
     const vehicleRotMat = applyRotationMatrix(matrixTranspose(mountingMatrix), xyzToMatrix(smoothACC.rotationRate));
@@ -317,7 +540,8 @@ function accelHandler(event) {
         }
     }
     
-    if (pages[curPage] == "Debug" || debugMode) {
+    // if (pages[curPage] == "Debug" || debugMode) {
+    if (true) {
         debugInclineRoll.pushData(0, smoothACC.timestamp, curPitch); // debugChartPushData(debugInclineRoll, 0, smoothACC.timestamp, curPitch);
         debugInclineRoll.pushData(1, smoothACC.timestamp, 0); // debugChartPushData(debugInclineRoll, 1, smoothACC.timestamp, 0); //  0 for reference line
         debugInclineRoll.pushData(2, smoothACC.timestamp, curRoll); // debugChartPushData(debugInclineRoll, 2, smoothACC.timestamp, curRoll);
@@ -331,12 +555,11 @@ function accelHandler(event) {
         debugMotionRot.pushData(2, smoothACC.timestamp, vehicleRot.z); // debugChartPushData(debugMotionRot, 2, smoothACC.timestamp, vehicleRot.z);
     }
 
-    // TODO : remove once rough constants set - debug table should still give some rough idea 
     document.getElementById("downVecSetup").textContent = downVec.setupQual?.toFixed(debugTableAcc);
     document.getElementById("downVecRunning").textContent = downVec.runningQual?.toFixed(debugTableAcc);
     document.getElementById("forwVecSetup").textContent = forwardVec.setupQual?.toFixed(debugTableAcc);
     document.getElementById("forwVecRunning").textContent = forwardVec.runningQual?.toFixed(debugTableAcc);
-    document.getElementById("straightQual").textContent = flatSection.straightQual?.toFixed(debugTableAcc);
+    document.getElementById("straightQual").textContent = flatSection.straightQual ? flatSection.straightQual.toFixed(debugTableAcc) : "--";
     
     
     calcSpd: {
@@ -364,19 +587,11 @@ function accelHandler(event) {
         }
         calcSpeedEl.textContent = calcSpeed.toFixed(0);
         calcSpdArr.push({ timestamp: smoothACC.timestamp, speed: calcSpeed });
-        debugSpeed.pushData(1, smoothACC.timestamp, calcSpeed); //debugChartPushData(debugSpeed, 1, smoothACC.timestamp, calcSpeed);
+        debugSpeed.pushData(1, smoothACC.timestamp, calcSpeed);
     }
 
     
-    // tractionCircleEl
-    // function updateTractionCircle(tractionCircleRef, acc, pitch, roll, settings) {}
-
-    // function updateLeafletMap
-    // map.flyTo() based on expected location in 1 second?
-
-    // debugTableAdd(`ACC Handler`, `smoothAcc len:${smoothACCarr.length}`, undefined, debugTable, debugTableCleanup);
-
-
+    tractionCir.updateDisplay(vehicleAcc, curPitch, curRoll);
 }
 
 
@@ -387,7 +602,7 @@ function gpsHandler(position) {
     const origDownVec = JSON.stringify(downVec);
 
     const adjusted = {
-        timestamp: replayMode ? position.timestamp : position.timestamp - startingTimeStamp,      // adjusted from epoch to relative -> so only need to account for 500ms offset
+        timestamp: replayMode ? position.timestamp : position.timestamp - startingTimeStamp,      // adjusted from epoch to relative -> so only need to account for gpsOffset
         coords: {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -399,7 +614,9 @@ function gpsHandler(position) {
         }
     };
 
-    document.getElementById("GPStemp").innerText = JSON.stringify(adjusted, null, 2);
+    const heading = adjusted?.coords?.heading;
+    calcHeadingEl.textContent = heading != null ? heading.toFixed(0) : "N/A";
+
     
     const minSetSpd = 10 / meterPerSecToMilePerHourC;
 
@@ -595,7 +812,7 @@ function gpsHandler(position) {
             debugTableAdd(`GPS Mount`, `init Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
             console.log(potForwVecList_debug);
         } 
-        else if (forwardVec.setupQual < forwardVec.setupQual * .9) {
+        else if (potentialForward.setupQual < forwardVec.setupQual * .9) {
             forwardVec = potentialForward;
             debugTableAdd(`GPS Mount`, `better setup Forward Vec x:${forwardVec.x.toFixed(debugTableAcc)} y:${forwardVec.y.toFixed(debugTableAcc)} z:${forwardVec.z.toFixed(debugTableAcc)}`, undefined, debugTable, debugTableCleanup);
             console.log(potForwVecList_debug);
@@ -610,6 +827,12 @@ function gpsHandler(position) {
     } // end of mounting
     
     if (origForwardVec !== JSON.stringify(forwardVec) || origDownVec !== JSON.stringify(downVec)) {
+        document.getElementById("downVecLiveX").textContent = downVec.x.toFixed(debugTableAcc); 
+        document.getElementById("downVecLiveY").textContent = downVec.y.toFixed(debugTableAcc); 
+        document.getElementById("downVecLiveZ").textContent = downVec.z.toFixed(debugTableAcc); 
+        document.getElementById("forwVecLiveX").textContent = forwardVec.x.toFixed(debugTableAcc); 
+        document.getElementById("forwVecLiveY").textContent = forwardVec.y.toFixed(debugTableAcc); 
+        document.getElementById("forwVecLiveZ").textContent = forwardVec.z.toFixed(debugTableAcc); 
         // debugTableAdd(`Mounting Matrix`, `new Mounting matrix made`, undefined, debugTable, debugTableCleanup);
         mountingMatrix = makeMountMatrix(downVec, forwardVec);
     }
@@ -640,11 +863,9 @@ const replayFileSelector = document.getElementById("replayUpload");
 replayUpload.value = "";
 let currentReplayId = 0; // increments for each new replay & reset to live
 
-function startReplay(fileGPSarr, fileACCarr, speedScale = 1.0) {
+function startReplay(fileGPSarr, fileACCarr, speedScale = 1.0, skipStart = 30 ) {
     replayMode = true;
     const replayId = ++currentReplayId;
-
-    const skipStart = 50; //seconds
 
     const replayStart = performance.now() - skipStart * 1000 - fileACCarr.at(0).timestamp; // timestamp for cases where pair time 
 
@@ -688,7 +909,7 @@ function startReplay(fileGPSarr, fileACCarr, speedScale = 1.0) {
 }
 
 
-function initReplayFromData(jsonData, speedScale = 1.0) {
+function initReplayFromData(jsonData, speedScale = 1.0, skipStart = 30) {
     const options = jsonData.Options;
     const fileGPSarr = [...jsonData.rawGPSarr];
     const fileACCarr = [...jsonData.rawACCarr];
@@ -703,6 +924,7 @@ function initReplayFromData(jsonData, speedScale = 1.0) {
     forwardVec = { x:0, y:0, z:-1, setupQual:null, runningQual:1 };
     mountingMatrix = makeMountMatrix(downVec, forwardVec);
     startingTimeStamp = options.startingTimeStamp;
+    gpsOffset = options.gpsOffset;
 
     replayProgress.progressBar.max = fileACCarr.at(-1)?.timestamp;
     replayProgress.maxValue.textContent = milliToStrTime(fileACCarr.at(-1)?.timestamp);
@@ -713,7 +935,7 @@ function initReplayFromData(jsonData, speedScale = 1.0) {
     debugSpeed.setData(0, []); debugSpeed.setData(1, []);
     debugInclineRoll.setData(0, []); debugInclineRoll.setData(1, []); debugInclineRoll.setData(2, []);
 
-    startReplay(fileGPSarr, fileACCarr, speedScale);
+    startReplay(fileGPSarr, fileACCarr, speedScale, skipStart);
 }
 
 basicReplayer: {
@@ -722,13 +944,13 @@ basicReplayer: {
             const file = event.target.files[0];
             if (!file) return alert("file issue");
 
-            if (pairButton.textContent === "Un-Pair") pairButton.click();
+            if (pairButtonEl.textContent === "Un-Pair") pairButtonEl.click();
 
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
                     const jsonData = JSON.parse(e.target.result);
-                    initReplayFromData(jsonData, 1.0);
+                    initReplayFromData(jsonData, 1.0, 300);
                 } catch (err) {
                     alert(`invalid JSON file: ${err}`);
                 }
@@ -751,5 +973,6 @@ function milliToStrTime(milli) {
     }
     return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
+
 
 debugTableAdd("JS main", "EOF main.js", undefined, debugTable, debugTableCleanup);

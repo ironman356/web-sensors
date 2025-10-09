@@ -9,7 +9,7 @@
 }
 
 html {
-	overflow: hidden;
+	overflow: auto;
 	font-family: monospace;
 	font-size: calc(var(--sqFontSize));
 	background-color: #222;
@@ -17,9 +17,6 @@ html {
 }
 
 nav {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-    grid-column-gap: 10px;
     transition:opacity 0.3s ease;
 }
 #topNav {
@@ -31,9 +28,9 @@ nav {
 }
 
 #topNav.showing {
-    display: grid; /* set via JS */
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-    grid-column-gap: 10px;
+    display: flex;
+	flex-direction: row;
+	gap: 1rem;
 }
 
 #topNav.visible {
@@ -42,7 +39,7 @@ nav {
 }
 
 nav * {
-	font-size: clamp(8px, 5vw, .5rem);
+	font-size: calc(var(--sqFontSize));
 	padding: 10px 0;
 	white-space: nowrap;
 	text-overflow: clip;
@@ -85,15 +82,7 @@ nav * {
     display: block;
 }
 
-#comboTractionCircle {
-	grid-area: 5 / 1 / 7 / 10;
-	width: 100%;
-	height: 100%;
-	max-width: 100%;
-	max-height: 100%;
-	display: block;
-	object-fit: contain;
-}
+
 
 /* initial hiding of all but 1st page */
 #Live { /* blank on purpose */ }
@@ -159,15 +148,8 @@ nav * {
 #Settings {
 	/* overflow: scroll; */
 }
-#showAll { grid-area: 8 / 1 / 9 / -1; } /* don't put at top - rapidly switching tabs can misclick */
-#gpsOffsetLabel {
-	grid-area: 2 / 1 / 3 / -1;
-	font-size: .5rem;
-	padding-top: 1em;
-}
-#gpsOffset {
-	grid-area: 2 / 7 / 3 / -1;
-}
+
+
 
 /* Debug tab */
 #debugGraphSpeed {
@@ -205,6 +187,21 @@ nav * {
 	grid-area: 12 / 6 / 14 / 10;
 	display:flex;
 	flex-direction: column;
+	font-size: .3rem;
+}
+#qualReadoutsStraightQual {
+  grid-area: 13 / 1 / 14 / 10;
+  font-size: .3rem;
+  margin-left: 30%;
+  width: 70%;
+}
+
+#downVecLive {
+	grid-area: 15 / 1 / 17 / 5;
+	font-size: .3rem;
+}
+#forwVecLive {
+	grid-area: 15 / 6 / 17 / 10;
 	font-size: .3rem;
 }
 
@@ -247,14 +244,25 @@ label[for="replayProgress"] div { display: flex; justify-content: space-between;
 
 
 
-#GPStemp {
-	display: none;
-    font-size: 10px;
-    grid-area: 5 / 1 / 8 / 10;
 
+
+#pairButton { grid-area: 2 / 8 / 4 / 10; display:flex; width: 80%; height: 80%; justify-content: center; align-items: center; margin:10%; }
+#saveRecordedButton { grid-area: 2 / 6 / 4 / 8; display:flex; width: 80%; height: 80%; justify-content: center; align-items: center; margin:10%; }
+#showAll { grid-area: 2 / 3 / 4 / 5; display:flex; width: 80%; height: 80%; justify-content: center; align-items: center; margin:10%; }
+#resetButton { grid-area: 2 / 1 / 4 / 3; display:flex; width: 80%; height: 80%; justify-content: center; align-items: center; margin:10%; }
+#pageToggles { grid-area: 4 / 1 / 5 / -1; display: flex; justify-content: space-around; font-size:.2rem; }
+
+#allSettings {
+  grid-area: 6 / 1 / -1 / -1;
+  /* border: 2px solid red; */
+  display: flex;
+  flex-direction: column;
+  font-size: 0.5rem;
+  gap:.1rem;
+  overflow: scroll;
 }
-#ACCtemp {
-	display: none;
-    font-size: 10px;
-    grid-area: 8 / 1 / 15 / 10;
-}
+#allSettings > * {display: flex; width: 100%; justify-content: center; gap: .3rem; }
+#allSettings > * > input, #allSettings > * > select {flex-grow: 1;}
+#allSettings > * > input[type="checkbox"] {flex-grow:0; aspect-ratio: 1;}
+
+#version {grid-area: 1 / 1 / 2 / -1; display: flex; justify-content: center; font-size: .75rem; }

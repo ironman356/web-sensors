@@ -78,7 +78,7 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
                     left: 'right',
                     top: `${(i + 1) * 25}%`,  // vertical position for each label
                     style: {
-                        text: lastValue !== null ? lastValue.toFixed(1) : 'N/A',
+                        text: lastValue == Number(lastValue) ? lastValue.toFixed(1) : 'N/A',
                         font: '1em',
                         fill: lineColors[i],
                         textAlign: 'left'
@@ -107,19 +107,19 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
             if (buf.length) {
                 fullData[i].push(...buf);
                 buffers[i] = [];
-
-                // remove old points beyond cutoff
-                while (fullData[i].length && fullData[i][0][0] < newestTimestamp - CHARTCUTOFF) {
-                    fullData[i].shift();
-                }
-
-                chart.setOption({
-                    series: [{
-                        name: lineLabels[i],
-                        data: fullData[i]
-                    }]
-                });
             }
+
+            // remove old points beyond cutoff
+            while (fullData[i].length && fullData[i][0][0] < newestTimestamp - CHARTCUTOFF) {
+                fullData[i].shift();
+            }
+
+            chart.setOption({
+                series: [{
+                    name: lineLabels[i],
+                    data: fullData[i]
+                }]
+            });
         }
 
         updateText();  // displaying the latest values
