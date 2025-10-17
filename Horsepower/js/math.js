@@ -1,5 +1,3 @@
-
-
 // export function vectorRotation3d(acc, rotation, inverse) {
 //     const [alphaDeg, betaDeg, gammaDeg] = rotation;
 
@@ -74,7 +72,6 @@
 //     return getEulerAnglesFromMatrix(R_final);
 // }
 
-
 // function getEulerAnglesFromMatrix(R) {
 //     const sy = Math.sqrt(R[0][0] * R[0][0] + R[1][0] * R[1][0]);
 
@@ -99,34 +96,32 @@
 //     };
 // }
 
-
 function toXYearth(lat, lon, lat0, lon0) {
-    const R = 6371000; // earth radius in meters
-    const dLat = (lat - lat0) * Math.PI / 180;
-    const dLon = (lon - lon0) * Math.PI / 180;
-    const x = R * dLon * Math.cos(lat0 * Math.PI / 180);
-    const y = R * dLat;
-    return [x, y];
+	const R = 6371000; // earth radius in meters
+	const dLat = ((lat - lat0) * Math.PI) / 180;
+	const dLon = ((lon - lon0) * Math.PI) / 180;
+	const x = R * dLon * Math.cos((lat0 * Math.PI) / 180);
+	const y = R * dLat;
+	return [x, y];
 }
 
 export function pointToLineDist(p1, p2, p3) {
-    // p1 = start, p3 = end, p2 = point to check
-    const lat0 = p1.latitude;
-    const lon0 = p1.longitude;
+	// p1 = start, p3 = end, p2 = point to check
+	const lat0 = p1.latitude;
+	const lon0 = p1.longitude;
 
-    const A = toXYearth(p1.latitude, p1.longitude, lat0, lon0);
-    const B = toXYearth(p2.latitude, p2.longitude, lat0, lon0);
-    const C = toXYearth(p3.latitude, p3.longitude, lat0, lon0);
+	const A = toXYearth(p1.latitude, p1.longitude, lat0, lon0);
+	const B = toXYearth(p2.latitude, p2.longitude, lat0, lon0);
+	const C = toXYearth(p3.latitude, p3.longitude, lat0, lon0);
 
-    const AC = [C[0] - A[0], C[1] - A[1]];
-    const AB = [B[0] - A[0], B[1] - A[1]];
+	const AC = [C[0] - A[0], C[1] - A[1]];
+	const AB = [B[0] - A[0], B[1] - A[1]];
 
-    const cross = Math.abs(AC[0] * AB[1] - AC[1] * AB[0]);
-    const len = Math.hypot(AC[0], AC[1]);
+	const cross = Math.abs(AC[0] * AB[1] - AC[1] * AB[0]);
+	const len = Math.hypot(AC[0], AC[1]);
 
-    return cross / len; // distance in meters
-} 
-
+	return cross / len; // distance in meters
+}
 
 /**
  * isolate gravity vec via acceleration w/gravity - linear acceleration
@@ -134,95 +129,87 @@ export function pointToLineDist(p1, p2, p3) {
  * @returns vector with only xyz properties being gravity
  */
 export function getGravity(vec) {
-    return {
-        x: vec.accelerationIncludingGravity.x - vec.acceleration.x,
-        y: vec.accelerationIncludingGravity.y - vec.acceleration.y,
-        z: vec.accelerationIncludingGravity.z - vec.acceleration.z,
-    };
+	return {
+		x: vec.accelerationIncludingGravity.x - vec.acceleration.x,
+		y: vec.accelerationIncludingGravity.y - vec.acceleration.y,
+		z: vec.accelerationIncludingGravity.z - vec.acceleration.z,
+	};
 }
 /**
  * Adds vec2 to vec1 preserving vec1's other properties
- * @param {*} vec1 
- * @param {*} vec2 
- * @returns 
+ * @param {*} vec1
+ * @param {*} vec2
+ * @returns
  */
 export function addVectors(vec1, vec2) {
-    vec1.x += vec2.x;
-    vec1.y += vec2.y;
-    vec1.z += vec2.z;
-    return vec1;
+	vec1.x += vec2.x;
+	vec1.y += vec2.y;
+	vec1.z += vec2.z;
+	return vec1;
 }
 /**
  * gets magnitude of vector based on its xyz peroperties
- * @param {*} vec 
+ * @param {*} vec
  * @returns number
  */
 export function xyzMagnitude(vec) {
-    const net = vec.x**2 + vec.y**2 + vec.z**2;
-    return Math.sqrt(net);
+	const net = vec.x ** 2 + vec.y ** 2 + vec.z ** 2;
+	return Math.sqrt(net);
 }
 /**
  * Distance between 2 objects based on xyz peroperties of passed object
- * @param {*} vec1 
- * @param {*} vec2 
+ * @param {*} vec1
+ * @param {*} vec2
  */
 export function xyzDistance(vec1, vec2) {
-    let result = 0;
-    result += (vec1.x - vec2.x)**2;
-    result += (vec1.y - vec2.y)**2;
-    result += (vec1.z - vec2.z)**2;
-    return Math.sqrt(result);
+	let result = 0;
+	result += (vec1.x - vec2.x) ** 2;
+	result += (vec1.y - vec2.y) ** 2;
+	result += (vec1.z - vec2.z) ** 2;
+	return Math.sqrt(result);
 }
 export function xyzToMatrix(obj) {
-    return [obj.x, obj.y, obj.z];
+	return [obj.x, obj.y, obj.z];
 }
 export function matrixToXYZ(arr) {
-    return {
-        x: arr[0],
-        y: arr[1],
-        z: arr[2],
-    }
+	return {
+		x: arr[0],
+		y: arr[1],
+		z: arr[2],
+	};
 }
 export function makeMountMatrix(down, forward) {
-    // right hand rule z up 
-    const z = matrixNormalize([-down.x, -down.y, -down.z]); // pos z = up
-    const y = matrixNormalize([forward.x, forward.y, forward.z]); 
-    const x = matrixNormalize(matrixCross(y, z));
-    const y_corrected = matrixCross(z, x);  // recomputed to ensure orthogonal
-    // x will be orthogonal, y_corrected is on the same plane as yz just also orthogonal to z & x
+	// right hand rule z up
+	const z = matrixNormalize([-down.x, -down.y, -down.z]); // pos z = up
+	const y = matrixNormalize([forward.x, forward.y, forward.z]);
+	const x = matrixNormalize(matrixCross(y, z));
+	const y_corrected = matrixCross(z, x); // recomputed to ensure orthogonal
+	// x will be orthogonal, y_corrected is on the same plane as yz just also orthogonal to z & x
 
-    return [
-        [x[0], y_corrected[0], -z[0]],
-        [x[1], y_corrected[1], -z[1]],
-        [x[2], y_corrected[2], -z[2]],
-    ];
+	return [
+		[x[0], y_corrected[0], -z[0]],
+		[x[1], y_corrected[1], -z[1]],
+		[x[2], y_corrected[2], -z[2]],
+	];
 }
 export function matrixNormalize(vec) {
-    const length = Math.sqrt(vec[0]**2 + vec[1]**2 + vec[2]**2);
-    if (length === 0) return { x:0, y:0, z:0 };
-    return [vec[0]/length, vec[1]/length, vec[2]/length];
+	const length = Math.sqrt(vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2);
+	if (length === 0) return { x: 0, y: 0, z: 0 };
+	return [vec[0] / length, vec[1] / length, vec[2] / length];
 }
 export function matrixCross(a, b) {
-    return [
-        a[1]*b[2] - a[2]*b[1],
-        a[2]*b[0] - a[0]*b[2],
-        a[0]*b[1] - a[1]*b[0]
-    ];
+	return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 }
 export function matrixTranspose(m) {
-    return [
-        [m[0][0], m[1][0], m[2][0]],
-        [m[0][1], m[1][1], m[2][1]],
-        [m[0][2], m[1][2], m[2][2]],
-    ];
+	return [
+		[m[0][0], m[1][0], m[2][0]],
+		[m[0][1], m[1][1], m[2][1]],
+		[m[0][2], m[1][2], m[2][2]],
+	];
 }
 export function applyRotationMatrix(m, v) {
-    return [
-        m[0][0]*v[0] + m[1][0]*v[1] + m[2][0]*v[2],
-        m[0][1]*v[0] + m[1][1]*v[1] + m[2][1]*v[2],
-        m[0][2]*v[0] + m[1][2]*v[1] + m[2][2]*v[2],
-    ];
+	return [m[0][0] * v[0] + m[1][0] * v[1] + m[2][0] * v[2], m[0][1] * v[0] + m[1][1] * v[1] + m[2][1] * v[2], m[0][2] * v[0] + m[1][2] * v[1] + m[2][2] * v[2]];
 }
 export function radToDeg(rad) {
-    return rad * 180 / Math.PI;
+	return (rad * 180) / Math.PI;
 }
