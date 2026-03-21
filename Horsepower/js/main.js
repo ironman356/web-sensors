@@ -1,4 +1,3 @@
-// disabled @ts-check v4
 
 // TODO : test structured copy in parts
 
@@ -129,7 +128,6 @@ const replayProgress = {
 };
 replayProgress.maxValue;
 let replayMode = false;
-let debugMode = false;
 
 const debugTableCleanup = 10 * 1000;
 const debugTable = document.getElementById("debugLedger");
@@ -156,9 +154,12 @@ const calcSpdArr = [];
 let accIntervalHZ = null;
 let mountingMatrix = null;
 
-/** @typedef {{ x:number, y:number, z:number, setupQual:number|null, runningQual:number }} downVec */
+/** @typedef {{ x:number, y:number, z:number, qual:number}} vecItem */
+/** @typedef {{ x:number, y:number, z:number, vecList:vecItem[] }} downVec */
 /** @type {downVec} */
-let downVec = { x: 0, y: -1, z: 0, setupQual: null, runningQual: 1 };
+let downVec = { x: 0, y: -1, z: 0,  };
+
+
 
 /**@typedef {{ x:number, y:number, z:number, setupQual:number|null, runningQual:number }} forwardVec*/
 /** @type {forwardVec} */
