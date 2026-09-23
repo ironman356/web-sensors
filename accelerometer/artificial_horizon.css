@@ -1,6 +1,6 @@
 
 body {
-    background-color: gray;
+    background-color: #090c10;
 }
 
 .container {
@@ -27,7 +27,8 @@ body {
 .difReadout span {
     text-align: right;
     display: block;
-    background: white;
+    background: #171d25;
+    border: 1px solid #29323d;
     padding: 6px 10px;
     border-radius: 6px;
 }
