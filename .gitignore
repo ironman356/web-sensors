@@ -1,3 +1,4 @@
 temp/*
 Horsepower/bundle.js
 .prettierrc
+node_modules/

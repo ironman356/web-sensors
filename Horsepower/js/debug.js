@@ -17,7 +17,7 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
     const chart = echarts.init(chartEl);
     chart.setOption({
         animation: false,
-        backgroundColor: '#bbb',
+        backgroundColor: '#11161d',
         tooltip: { show: false },
         grid: {
             show: true,
@@ -31,7 +31,7 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
         yAxis: {
             name: yAxisLabel,
             nameTextStyle: {
-                color: '#000',
+                color: '#aab4c0',
             },
             splitNumber: 1,
             scale: true,
@@ -41,7 +41,7 @@ export function debugChartInit(chartElId, lineLabels, yAxisLabel, CHARTCUTOFF = 
                 margin: 20,
                 formatter: value => value.toFixed(1),
                 fontFamily: 'mono-space',
-                color: '#000'
+                color: '#aab4c0'
             },
         },
         series,

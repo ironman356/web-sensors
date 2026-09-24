@@ -72,7 +72,7 @@ function enableAccelerometer() {
 
 
 function drawRings() {
-    ctx.strokeStyle = "black";
+    ctx.strokeStyle = "#64748b";
     ctx.lineWidth = ringLineWidth;
     outerRadius = canvas.width / 2 - ctx.lineWidth / 2;
 
@@ -127,7 +127,7 @@ function drawAccelPoint(initX, initZ) {
 
 function drawOldAccPoint(x, y) {
     ctx.beginPath();
-    ctx.fillStyle = "lightpink";
+    ctx.fillStyle = "#fb7185";
     ctx.arc(x, y, accPointSize / 2, 0, Math.PI * 2);
     ctx.fill();
 }

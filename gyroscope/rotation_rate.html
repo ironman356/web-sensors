@@ -4,16 +4,19 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Rotation Rate</title>
+        <link rel="stylesheet" href="../theme.css">
     </head>
     <body>
+        <nav><a href="../web_sensors.html">Directory</a></nav>
         <main>
-            <h1>Rotaiton Rate Isolation</h1>
+            <h1>Rotation Rate Isolation</h1>
             <canvas id="rotation"></canvas>
             <button onclick="startMotion();">Pair</button>
         </main>
     </body>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="../theme.js"></script>
 
     <script>
         const ctx = document.getElementById("rotation").getContext("2d");

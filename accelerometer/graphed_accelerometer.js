@@ -30,7 +30,7 @@ function createChart(canvasId, label) {
                 { label: label + " X", borderColor: "red", borderWidth: 2, pointRadius: 0, data: [], fill: false },
                 { label: label + " Y", borderColor: "green", borderWidth: 2, pointRadius: 0, data: [], fill: false },
                 { label: label + " Z", borderColor: "blue", borderWidth: 2, pointRadius: 0, data: [], fill: false },
-                { label: label + " Total", borderColor: "black", borderWidth: 2, pointRadius: 0, data: [], fill: false },
+                { label: label + " Total", borderColor: "#e2e8f0", borderWidth: 2, pointRadius: 0, data: [], fill: false },
             ],
         },
         options: {

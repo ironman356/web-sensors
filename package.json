@@ -1,0 +1,12 @@
+{
+  "name": "web-sensors",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "vite": "^8.2.2"
+  }
+}
