@@ -1,14 +1,246 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Light Timer</title>
-    <link rel="stylesheet" href="../theme.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Traffic Light Camera</title>
+  <link rel="stylesheet" href="../theme.css">
+  <style>
+    body { text-align: center; }
+    main { max-width: 900px; margin: auto; padding: 0 12px 24px; }
+    label { display: inline-block; margin: 0 8px 12px; }
+    select { padding: 8px; font: inherit; }
+    .preview { position: relative; margin: auto; max-width: 800px; background: #111; }
+    video { display: block; width: 100%; }
+    .target {
+      position: absolute;
+      left: 32%; top: 12%; width: 36%; height: 56%;
+      border: 3px solid white;
+      box-sizing: border-box;
+      box-shadow: 0 0 0 1px black;
+      pointer-events: none;
+    }
+    .badge {
+      position: absolute;
+      top: 10px; left: 10px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      color: white;
+      background: #555;
+      font-weight: bold;
+      pointer-events: none;
+    }
+    .badge.red { background: #b00020; }
+    .badge.green { background: #087f23; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .stat { padding: 10px; border: 1px solid #888; border-radius: 4px; }
+    .stat strong { display: block; font-size: 1.25rem; }
+    #message { min-height: 1.5em; }
+  </style>
 </head>
 <body>
-    <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
-    <h1>Traffic Light Timer</h1>
-    <p>Coming soon.</p>
+  <nav><a href="../web_sensors.html"><button>Directory</button></a></nav>
+  <main>
+    <h1>Traffic Light Camera</h1>
+    <label for="cameraSelect">Camera</label>
+    <select id="cameraSelect" disabled><option>Requesting camera…</option></select>
+
+    <div class="preview">
+      <video id="camera" autoplay muted playsinline></video>
+      <div class="target" aria-hidden="true"></div>
+      <div id="badge" class="badge">NO LIGHT</div>
+    </div>
+    <p>Aim the traffic light inside the box.</p>
+
+    <div class="stats">
+      <div class="stat">Detected<strong id="state" aria-live="polite">No light</strong></div>
+      <div class="stat">Since red → green<strong id="elapsed">—</strong></div>
+      <div class="stat">Preview FPS<strong id="fps">—</strong></div>
+      <div class="stat">Resolution<strong id="resolution">—</strong></div>
+    </div>
+    <p id="message" role="status"></p>
+  </main>
+
+  <canvas id="sample" width="64" height="96" hidden></canvas>
+  <script>
+    const video = document.getElementById('camera');
+    const cameraSelect = document.getElementById('cameraSelect');
+    const sample = document.getElementById('sample');
+    const context = sample.getContext('2d', { willReadFrequently: true });
+    const stateOutput = document.getElementById('state');
+    const badge = document.getElementById('badge');
+    const elapsedOutput = document.getElementById('elapsed');
+    const fpsOutput = document.getElementById('fps');
+    const resolutionOutput = document.getElementById('resolution');
+    const message = document.getElementById('message');
+
+    const MIN_LIGHT_FRACTION = 0.003;
+    const STABLE_FRAMES = 3;
+    let stream;
+    let analysisToken = 0;
+    let stableState = 'none';
+    let candidateState = 'none';
+    let candidateFrames = 0;
+    let redArmed = false;
+    let changedAt = null;
+
+    // ponytail: color thresholds are intentionally basic; replace with a model only if real footage needs it.
+    function classifyPixels(pixels) {
+      let red = 0;
+      let green = 0;
+
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
+        if (r > 110 && r > g * 1.35 && r > b * 1.2) red++;
+        if (g > 100 && g > r * 1.25 && g > b * 1.15) green++;
+      }
+
+      const minimum = Math.max(3, pixels.length / 4 * MIN_LIGHT_FRACTION);
+      if (red >= minimum && red > green * 1.3) return 'red';
+      if (green >= minimum && green > red * 1.3) return 'green';
+      return 'none';
+    }
+
+    function showState(nextState) {
+      if (nextState === stableState) return;
+      stableState = nextState;
+
+      if (nextState === 'red') redArmed = true;
+      if (nextState === 'green' && redArmed) {
+        changedAt = performance.now();
+        redArmed = false;
+      }
+
+      const labels = { none: 'No light', red: 'Red light', green: 'Green light' };
+      stateOutput.textContent = labels[nextState];
+      badge.textContent = labels[nextState].toUpperCase();
+      badge.className = `badge ${nextState === 'none' ? '' : nextState}`;
+    }
+
+    function resetDetection() {
+      stableState = 'reset';
+      candidateState = 'none';
+      candidateFrames = 0;
+      redArmed = false;
+      changedAt = null;
+      showState('none');
+      elapsedOutput.textContent = '—';
+      fpsOutput.textContent = '—';
+    }
+
+    function inspectFrame() {
+      const width = video.videoWidth;
+      const height = video.videoHeight;
+      if (!width || !height) return;
+
+      context.drawImage(video, width * 0.32, height * 0.12, width * 0.36, height * 0.56,
+        0, 0, sample.width, sample.height);
+      const next = classifyPixels(context.getImageData(0, 0, sample.width, sample.height).data);
+
+      if (next === candidateState) candidateFrames++;
+      else {
+        candidateState = next;
+        candidateFrames = 1;
+      }
+      if (candidateFrames >= STABLE_FRAMES) showState(next);
+    }
+
+    function startAnalysis(token) {
+      let frames = 0;
+      let fpsStartedAt = performance.now();
+      let lastMediaTime = -1;
+
+      function frame(now, metadata) {
+        if (token !== analysisToken) return;
+        const mediaTime = metadata?.mediaTime ?? video.currentTime;
+        if (mediaTime !== lastMediaTime) {
+          lastMediaTime = mediaTime;
+          frames++;
+          inspectFrame();
+        }
+
+        if (now - fpsStartedAt >= 1000) {
+          fpsOutput.textContent = (frames * 1000 / (now - fpsStartedAt)).toFixed(1);
+          frames = 0;
+          fpsStartedAt = now;
+        }
+
+        if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(frame);
+        else requestAnimationFrame(frame);
+      }
+
+      if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(frame);
+      else requestAnimationFrame(frame);
+    }
+
+    async function refreshCameras() {
+      const devices = (await navigator.mediaDevices.enumerateDevices())
+        .filter(device => device.kind === 'videoinput');
+      const activeId = stream?.getVideoTracks()[0]?.getSettings().deviceId;
+
+      cameraSelect.replaceChildren(...devices.map((device, index) => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.textContent = device.label || `Camera ${index + 1}`;
+        return option;
+      }));
+      cameraSelect.disabled = devices.length < 2;
+      if (activeId) cameraSelect.value = activeId;
+    }
+
+    async function startCamera(deviceId) {
+      analysisToken++;
+      stream?.getTracks().forEach(track => track.stop());
+      resetDetection();
+      message.textContent = 'Starting camera…';
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            frameRate: { ideal: 30 }
+          },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+        resolutionOutput.textContent = `${video.videoWidth} × ${video.videoHeight}`;
+        message.textContent = '';
+        startAnalysis(analysisToken);
+        await refreshCameras();
+      } catch (error) {
+        message.textContent = `Camera unavailable: ${error.message}`;
+        resolutionOutput.textContent = '—';
+        cameraSelect.disabled = true;
+      }
+    }
+
+    cameraSelect.addEventListener('change', () => startCamera(cameraSelect.value));
+    navigator.mediaDevices?.addEventListener('devicechange', refreshCameras);
+    setInterval(() => {
+      elapsedOutput.textContent = changedAt === null
+        ? '—'
+        : `${((performance.now() - changedAt) / 1000).toFixed(2)} s`;
+    }, 50);
+
+    const redCheck = new Uint8ClampedArray(Array(4).fill([255, 0, 0, 255]).flat());
+    console.assert(classifyPixels(redCheck) === 'red', 'Traffic light classifier self-check failed');
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      message.textContent = 'Camera access is not supported in this browser.';
+      cameraSelect.disabled = true;
+    } else {
+      startCamera();
+    }
+  </script>
 </body>
 </html>
