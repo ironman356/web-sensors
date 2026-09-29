@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [basicSsl()],
   server: {
     host: true,
-    open: '/web_sensors.html',
+    open: '/',
   },
 })
