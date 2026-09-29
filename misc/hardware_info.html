@@ -1,49 +1,166 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="author" content="https://github.com/ironman356">
+    <meta name="description" content="Live hardware and browser capability diagnostics for this device.">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="robots" content="noindex, nofollow, noimageindex" />
-    <title>Hardware Info</title>
+    <meta name="robots" content="noindex, nofollow, noimageindex">
+    <title>Hardware Information</title>
+    <link rel="stylesheet" href="../theme.css">
     <style>
-        html, body {
+        body.hardware-page {
+            width: min(100%, 78rem);
+            padding: max(1.25rem, env(safe-area-inset-top)) max(1.25rem, env(safe-area-inset-right)) max(2rem, env(safe-area-inset-bottom)) max(1.25rem, env(safe-area-inset-left));
+        }
+        .hardware-page nav { justify-content: space-between; }
+        .hardware-page nav a::before { content: "\2190"; }
+        .refresh-button {
+            min-height: 0;
             margin: 0;
-            padding: 0;
-            min-height: 100%;
-            box-sizing: border-box;
+            padding: 0.55rem 0.9rem;
+            border-radius: 999px;
         }
-
-        body {
+        .hero { margin: 2rem 0 1.5rem; }
+        .hero h1 {
+            max-width: 12ch;
+            margin: 0;
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            line-height: 0.95;
+            letter-spacing: -0.055em;
+        }
+        .hardware-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+        }
+        .info-card {
+            overflow: hidden;
             border: 1px solid var(--border);
-            padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+            border-radius: 1rem;
+            background: var(--surface);
         }
-        button, input {
-            font-size: 200%;
+        .card-header {
+            padding: 1.15rem 1.25rem 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .card-header h2 { margin: 0; font-size: 1.05rem; }
+        .metrics { margin: 0; padding: 0 1.25rem; }
+        .metric {
+            display: grid;
+            grid-template-columns: minmax(8rem, 0.8fr) minmax(0, 1.2fr);
+            gap: 1rem;
+            align-items: baseline;
+            padding: 0.8rem 0;
+            border-bottom: 1px solid #303030;
+        }
+        .metric:last-child { border-bottom: 0; }
+        .metric dt { color: var(--muted); font-size: 0.85rem; }
+        .metric dd {
+            min-width: 0;
+            margin: 0;
+            overflow-wrap: anywhere;
+            text-align: right;
+            font-weight: 650;
+        }
+        .metric dd.unavailable { color: #8d98a5; font-weight: 400; }
+        .metric-wide { grid-column: 1 / -1; }
+        @media (max-width: 48rem) {
+            .hardware-grid { grid-template-columns: 1fr; }
+            .metric-wide { grid-column: auto; }
+        }
+        @media (max-width: 27rem) {
+            .metric { grid-template-columns: 1fr; gap: 0.2rem; }
+            .metric dd { text-align: left; }
         }
     </style>
-    <link rel="stylesheet" href="../theme.css">
 </head>
-<body>
-    <nav><a href="../"><button>Directory</button></a></nav>
-    <h2>Hardware Info</h2>
+<body class="hardware-page">
+    <nav aria-label="Page navigation">
+        <a href="../">Directory</a>
+        <button class="refresh-button" id="refresh" type="button">Refresh</button>
+    </nav>
 
-    <p id="status"></p>
+    <main>
+        <header class="hero">
+            <h1>Hardware info</h1>
+        </header>
 
-    <h3>Screen</h3>
-    <label>Width: </label><span id="screenWidth">--</span><br />
-    <label>Height: </label><span id="screenHeight">--</span><br />
-    <label>PixelRatio: </label><span id="devicePixelRatio">--</span><br />
-    <label>Color Depth: <span id="screenColorDepth">--</span></label><br />
-    <label>Pixel Depth: <span id="screenPixelDepth">--</span></label><br />
-    
-    <label>CPU Threads: <span id="logicalCores">--</span></label><br />
-    <label>Memory: <span id="memory">--</span></label><br />
-    <label>Online: <span id="online">--</span></label><br />
-    <label>Orientaiton: <span id="orientaiton">--</span></label><br />
+        <div class="hardware-grid">
+            <section class="info-card" aria-labelledby="display-heading">
+                <header class="card-header"><h2 id="display-heading">Display</h2></header>
+                <dl class="metrics">
+                    <div class="metric"><dt>Screen size</dt><dd data-value="screenSize">--</dd></div>
+                    <div class="metric"><dt>Available area</dt><dd data-value="availableScreen">--</dd></div>
+                    <div class="metric"><dt>Pixel ratio</dt><dd data-value="pixelRatio">--</dd></div>
+                    <div class="metric"><dt>Estimated native pixels</dt><dd data-value="nativeResolution">--</dd></div>
+                    <div class="metric"><dt>Color depth</dt><dd data-value="colorDepth">--</dd></div>
+                    <div class="metric"><dt>Orientation</dt><dd data-value="orientation">--</dd></div>
+                </dl>
+            </section>
 
-    <label>Blue box: <span id="blueBoxArea">--x--</span></label>
+            <section class="info-card" aria-labelledby="viewport-heading">
+                <header class="card-header"><h2 id="viewport-heading">Viewport</h2></header>
+                <dl class="metrics">
+                    <div class="metric"><dt>Layout viewport</dt><dd data-value="layoutViewport">--</dd></div>
+                    <div class="metric"><dt>Visual viewport</dt><dd data-value="visualViewport">--</dd></div>
+                    <div class="metric"><dt>Document area</dt><dd data-value="documentArea">--</dd></div>
+                    <div class="metric"><dt>Viewport scale</dt><dd data-value="viewportScale">--</dd></div>
+                </dl>
+            </section>
+
+            <section class="info-card" aria-labelledby="device-heading">
+                <header class="card-header"><h2 id="device-heading">Device</h2></header>
+                <dl class="metrics">
+                    <div class="metric"><dt>Platform</dt><dd data-value="platform">--</dd></div>
+                    <div class="metric"><dt>Logical processors</dt><dd data-value="logicalCores">--</dd></div>
+                    <div class="metric"><dt>Approx. memory</dt><dd data-value="memory">--</dd></div>
+                    <div class="metric"><dt>Touch points</dt><dd data-value="touchPoints">--</dd></div>
+                    <div class="metric"><dt>Device class</dt><dd data-value="deviceClass">--</dd></div>
+                </dl>
+            </section>
+
+            <section class="info-card" aria-labelledby="graphics-heading">
+                <header class="card-header"><h2 id="graphics-heading">Graphics</h2></header>
+                <dl class="metrics">
+                    <div class="metric"><dt>Renderer</dt><dd data-value="gpuRenderer">--</dd></div>
+                    <div class="metric"><dt>Vendor</dt><dd data-value="gpuVendor">--</dd></div>
+                    <div class="metric"><dt>WebGL version</dt><dd data-value="webglVersion">--</dd></div>
+                    <div class="metric"><dt>Max texture size</dt><dd data-value="maxTextureSize">--</dd></div>
+                </dl>
+            </section>
+
+            <section class="info-card" aria-labelledby="network-heading">
+                <header class="card-header"><h2 id="network-heading">Network</h2></header>
+                <dl class="metrics">
+                    <div class="metric"><dt>Online</dt><dd data-value="networkStatus">--</dd></div>
+                    <div class="metric"><dt>Connection type</dt><dd data-value="connectionType">--</dd></div>
+                    <div class="metric"><dt>Effective speed</dt><dd data-value="effectiveType">--</dd></div>
+                    <div class="metric"><dt>Estimated downlink</dt><dd data-value="downlink">--</dd></div>
+                    <div class="metric"><dt>Estimated latency</dt><dd data-value="rtt">--</dd></div>
+                    <div class="metric"><dt>Data saver</dt><dd data-value="saveData">--</dd></div>
+                </dl>
+            </section>
+
+            <section class="info-card" aria-labelledby="browser-heading">
+                <header class="card-header"><h2 id="browser-heading">Browser context</h2></header>
+                <dl class="metrics">
+                    <div class="metric"><dt>Language</dt><dd data-value="language">--</dd></div>
+                    <div class="metric"><dt>Time zone</dt><dd data-value="timeZone">--</dd></div>
+                    <div class="metric"><dt>Cookies</dt><dd data-value="cookies">--</dd></div>
+                    <div class="metric"><dt>Secure context</dt><dd data-value="secureContext">--</dd></div>
+                    <div class="metric"><dt>Cross-origin isolated</dt><dd data-value="crossOriginIsolated">--</dd></div>
+                </dl>
+            </section>
+
+            <section class="info-card metric-wide" aria-labelledby="software-heading">
+                <header class="card-header"><h2 id="software-heading">Software identifier</h2></header>
+                <dl class="metrics"><div class="metric"><dt>User agent</dt><dd data-value="userAgent">--</dd></div></dl>
+            </section>
+        </div>
+
+    </main>
 
     <script src="hardware_info.js"></script>
 </body>
