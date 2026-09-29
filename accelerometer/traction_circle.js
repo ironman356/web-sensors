@@ -90,12 +90,12 @@ function drawRings() {
 }
 
 
-let viewAngle = 25;
-function updateViewAngle(value) {
-    viewAngle = parseInt(value);
-    document.getElementById("status").textContent = "View Angle: " + viewAngle;
+let yawRotation = Number(document.getElementById("yawRotation").value);
+function updateYawRotation(value) {
+    yawRotation = parseInt(value);
+    document.getElementById("status").textContent = "Yaw rotation: " + yawRotation + "\u00b0";
 }
-document.getElementById("viewAngle").addEventListener("input", (event) => {updateViewAngle(event.target.value); });
+document.getElementById("yawRotation").addEventListener("input", (event) => {updateYawRotation(event.target.value); });
 
 
 let outerCircleSpd = 9.8066 / 2;
@@ -108,7 +108,7 @@ document.getElementById("maxVisibleAccel").addEventListener("input", (event) => 
 
 
 function drawAccelPoint(initX, initZ) {
-    let radians = viewAngle * (Math.PI / 180);
+    let radians = yawRotation * (Math.PI / 180);
     let cos = Math.cos(radians);
     let sin = Math.sin(radians);
 
@@ -135,8 +135,8 @@ function drawOldAccPoint(x, y) {
 let paused = false;
 function togglePause() {
     paused = !paused;
-    document.getElementById("pausePoints").textContent = paused ? "Unpause" : "Pause";
-    document.getElementById("status").textContent = paused ? "Unpaused" : "Paused";
+    document.getElementById("pausePoints").textContent = paused ? "Resume trail" : "Pause trail";
+    document.getElementById("status").textContent = paused ? "Trail paused" : "Trail resumed";
 }
 
 resizeCanvas();

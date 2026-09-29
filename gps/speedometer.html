@@ -10,29 +10,56 @@
         <title>Speedometer</title>
         <link rel="stylesheet" href="../theme.css">
         <style>
-            body { 
-                font-size: 4em; 
+            body {
+                min-height: 100svh;
+                padding: clamp(0.75rem, 3vw, 2rem);
                 background-color: var(--bg);
                 color: var(--text);
+                overflow-x: hidden;
             }
             #topReadout {
-                padding-top: 10vw;
-                display: flex;
-                align-items: flex-end;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto auto;
+                gap: clamp(0.4rem, 2vw, 1.5rem);
+                align-items: baseline;
+                padding-top: clamp(5rem, 12vh, 8rem);
+                margin-bottom: clamp(2rem, 8vh, 5rem);
             }
             h1, h2, h3 { margin: 0; }
-            h1 { text-align: right; width: 50vw; }
-            h3 { margin-left: 2vw; }
-            h2 { margin-left: 5vw; }
-            button, select { font-size: 1em; }
+            #speed {
+                min-width: 0;
+                font-size: clamp(3rem, 17vw, 12rem);
+                line-height: 0.8;
+                text-align: right;
+            }
+            #speedUnits { font-size: clamp(1rem, 3.5vw, 2.5rem); }
+            #heading { font-size: clamp(2rem, 6vw, 4.5rem); }
+            #time-stamp, #accuracy {
+                margin-block: 0.75rem;
+                font-size: clamp(1.25rem, 4vw, 2.5rem);
+            }
+            body > br { display: none; }
+            button, select {
+                margin-top: 0.75rem;
+                font-size: clamp(1rem, 2vw, 1.25rem);
+            }
 
             nav {
                 position: fixed;
+                z-index: 1;
                 transition: transform 0.5s ease-in-out;
             }
             .hidden {
                 transform: translateY(-100%);
                 opacity: 0;
+            }
+
+            @media (max-width: 30rem) {
+                #topReadout { grid-template-columns: minmax(0, 1fr) auto; }
+                #heading {
+                    grid-column: 1 / -1;
+                    justify-self: center;
+                }
             }
         </style>
     </head>

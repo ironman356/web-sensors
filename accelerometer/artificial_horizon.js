@@ -5,8 +5,13 @@ const pairButtonEl = document.getElementById("pairButton");
 
 const pixelRatio = window.devicePixelRatio || 1;
 
-canvas.width = canvas.clientWidth * pixelRatio;
-canvas.height = canvas.clientHeight * pixelRatio;
+function resizeCanvas() {
+    canvas.width = Math.round(canvas.clientWidth * pixelRatio);
+    canvas.height = Math.round(canvas.clientHeight * pixelRatio);
+}
+
+resizeCanvas();
+window.addEventListener("resize", resizeCanvas);
 
 
 function togglAccPair() {

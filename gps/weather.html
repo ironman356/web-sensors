@@ -13,20 +13,159 @@
         <title>Weather</title>
         <link rel="stylesheet" href="../theme.css">
         <link rel="icon" href="../favicon.ico" type="image/x-icon">
-        <script defer>
-
-        </script>
+        <style>
+            .weather-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+                gap: 0.75rem;
+                margin: 1rem 0;
+            }
+            .weather-grid > div {
+                padding: 1rem;
+                border: 1px solid var(--border);
+                background: var(--surface);
+            }
+            .weather-grid dt { color: var(--muted); }
+            .weather-grid dd {
+                margin: 0.25rem 0 0;
+                font-size: clamp(1.25rem, 4vw, 2rem);
+                font-weight: 700;
+            }
+            .weather-controls {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 0.5rem;
+            }
+            #condition { margin-bottom: 0.25rem; }
+            #errors { min-height: 1.2em; }
+        </style>
     </head>
     <body>
-        <header>
-            <h1>Weather via Open-Meteo & navigator</h1>
-        </header>
         <nav>
             <a href="../">Directory</a>
         </nav>
+        <header class="page-header">
+            <p class="eyebrow">GPS + Open-Meteo</p>
+            <h1>Current weather</h1>
+            <p id="status" role="status">Share your location to load current conditions.</p>
+        </header>
         <main>
-            <h1>Weather</h1> 
+            <div class="weather-controls">
+                <label for="unitSystem">Units</label>
+                <select id="unitSystem">
+                    <option value="metric">Metric</option>
+                    <option value="imperial">Imperial</option>
+                </select>
+                <button id="loadWeather" type="button">Share location &amp; load weather</button>
+            </div>
+            <p id="errors" role="alert"></p>
+
+            <section id="weather" aria-live="polite" hidden>
+                <h2 id="condition">--</h2>
+                <p>Updated <time id="updated">--</time></p>
+                <p>Location: <span id="location">--</span></p>
+                <dl class="weather-grid">
+                    <div><dt>Temperature</dt><dd id="temperature">--</dd></div>
+                    <div><dt>Feels like</dt><dd id="feelsLike">--</dd></div>
+                    <div><dt>Humidity</dt><dd id="humidity">--</dd></div>
+                    <div><dt>Precipitation</dt><dd id="precipitation">--</dd></div>
+                    <div><dt>Cloud cover</dt><dd id="cloudCover">--</dd></div>
+                    <div><dt>Sea-level pressure</dt><dd id="pressure">--</dd></div>
+                    <div><dt>Wind</dt><dd id="wind">--</dd></div>
+                    <div><dt>Wind gusts</dt><dd id="gusts">--</dd></div>
+                </dl>
+            </section>
         </main>
-        <footer></footer>
+        <footer>
+            <small>Exact coordinates and available altitude are sent to <a href="https://open-meteo.com/" rel="external">Open-Meteo</a> when weather is loaded.</small>
+        </footer>
+        <script>
+            const CONDITIONS = {
+                0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+                45: "Fog", 48: "Rime fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle",
+                56: "Light freezing drizzle", 57: "Heavy freezing drizzle", 61: "Light rain", 63: "Rain",
+                65: "Heavy rain", 66: "Light freezing rain", 67: "Heavy freezing rain", 71: "Light snow",
+                73: "Snow", 75: "Heavy snow", 77: "Snow grains", 80: "Light rain showers",
+                81: "Rain showers", 82: "Heavy rain showers", 85: "Light snow showers", 86: "Heavy snow showers",
+                95: "Thunderstorm", 96: "Thunderstorm with light hail", 99: "Thunderstorm with heavy hail"
+            };
+
+            const button = document.getElementById("loadWeather");
+            const unitSystem = document.getElementById("unitSystem");
+            const status = document.getElementById("status");
+            const errors = document.getElementById("errors");
+            const weather = document.getElementById("weather");
+
+            function setReading(id, current, units, key) {
+                document.getElementById(id).textContent = `${current[key]} ${units[key]}`;
+            }
+
+            function renderWeather(data, position, imperial) {
+                const current = data.current;
+                const units = data.current_units;
+                if (!current || !units) throw new Error("Weather service returned no current conditions");
+
+                document.getElementById("condition").textContent = CONDITIONS[current.weather_code] ?? `Weather code ${current.weather_code}`;
+                document.getElementById("updated").textContent = `${current.time.replace("T", " ")} ${data.timezone_abbreviation}`;
+                document.getElementById("location").textContent = `${position.coords.latitude.toFixed(5)}, ${position.coords.longitude.toFixed(5)} (±${Math.round(position.coords.accuracy)} m)`;
+                setReading("temperature", current, units, "temperature_2m");
+                setReading("feelsLike", current, units, "apparent_temperature");
+                setReading("humidity", current, units, "relative_humidity_2m");
+                setReading("precipitation", current, units, "precipitation");
+                setReading("cloudCover", current, units, "cloud_cover");
+                document.getElementById("pressure").textContent = imperial ? `${(current.pressure_msl * 0.02953).toFixed(2)} inHg` : `${current.pressure_msl} ${units.pressure_msl}`;
+                const windUnit = imperial ? "mph" : units.wind_speed_10m;
+                document.getElementById("wind").textContent = `${current.wind_speed_10m} ${windUnit} from ${current.wind_direction_10m}${units.wind_direction_10m}`;
+                document.getElementById("gusts").textContent = `${current.wind_gusts_10m} ${windUnit}`;
+                weather.hidden = false;
+            }
+
+            async function loadWeather() {
+                errors.textContent = "";
+                button.disabled = true;
+                unitSystem.disabled = true;
+                status.textContent = "Getting your location…";
+
+                try {
+                    if (!("geolocation" in navigator)) throw new Error("Geolocation is not supported by this browser");
+                    const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        maximumAge: 300000,
+                        timeout: 10000
+                    }));
+                    status.textContent = "Loading current weather…";
+
+                    const imperial = unitSystem.value === "imperial";
+                    const params = new URLSearchParams({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        current: "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+                        temperature_unit: imperial ? "fahrenheit" : "celsius",
+                        wind_speed_unit: imperial ? "mph" : "kmh",
+                        precipitation_unit: imperial ? "inch" : "mm",
+                        timezone: "auto"
+                    });
+                    if (position.coords.altitude !== null) params.set("elevation", position.coords.altitude);
+                    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+                    if (!response.ok) throw new Error(`Weather service returned ${response.status}`);
+
+                    renderWeather(await response.json(), position, imperial);
+                    status.textContent = "Current conditions loaded.";
+                    button.textContent = "Refresh current weather";
+                } catch (error) {
+                    status.textContent = "Weather unavailable.";
+                    errors.textContent = error.code ? `Location error: ${error.message}` : error.message;
+                } finally {
+                    button.disabled = false;
+                    unitSystem.disabled = false;
+                }
+            }
+
+            button.addEventListener("click", loadWeather);
+            unitSystem.addEventListener("change", () => {
+                if (!weather.hidden) loadWeather();
+            });
+        </script>
     </body>
 </html>
