@@ -10,6 +10,7 @@
     main { max-width: 900px; margin: auto; padding: 0 12px 24px; }
     label { display: inline-block; margin: 0 8px 12px; }
     select { padding: 8px; font: inherit; }
+    .source-controls,
     .camera-controls {
       display: flex;
       flex-wrap: wrap;
@@ -18,6 +19,7 @@
       gap: 8px;
       margin-bottom: 12px;
     }
+    .source-controls label,
     .camera-controls label { margin: 0; }
     .camera-controls output { min-width: 4.5em; }
     .camera-controls[hidden] { display: none; }
@@ -70,8 +72,13 @@
   <nav><a href="../">Directory</a></nav>
   <main>
     <h1>Traffic Light Detector</h1>
-    <label for="cameraSelect">Camera</label>
-    <select id="cameraSelect" disabled><option>Requesting camera...</option></select>
+    <div class="source-controls">
+      <label for="cameraSelect">Camera</label>
+      <select id="cameraSelect" disabled><option>Requesting camera...</option></select>
+      <label for="videoFile">or upload video</label>
+      <input id="videoFile" type="file" accept="video/*">
+      <button id="useCamera" type="button" hidden>Use camera</button>
+    </div>
     <div id="cameraControls" class="camera-controls" hidden>
       <label for="whiteBalanceMode">White balance</label>
       <select id="whiteBalanceMode"></select>
@@ -93,7 +100,7 @@
       <div class="stat">Detected<strong id="state" aria-live="polite">No light</strong></div>
       <div class="stat">Since red &rarr; green<strong id="elapsed">&mdash;</strong></div>
       <div class="stat">Detection FPS<strong id="fps">&mdash;</strong></div>
-      <div class="stat">Camera resolution<strong id="resolution">&mdash;</strong></div>
+      <div class="stat">Source resolution<strong id="resolution">&mdash;</strong></div>
     </div>
     <p id="message" role="status"></p>
   </main>
@@ -118,6 +125,8 @@
     const analysis = document.createElement('canvas');
     const analysisContext = analysis.getContext('2d', { willReadFrequently: true });
     const cameraSelect = document.getElementById('cameraSelect');
+    const videoFile = document.getElementById('videoFile');
+    const useCamera = document.getElementById('useCamera');
     const stateOutput = document.getElementById('state');
     const badge = document.getElementById('badge');
     const elapsedOutput = document.getElementById('elapsed');
@@ -132,6 +141,7 @@
     const cameraControlStatus = document.getElementById('cameraControlStatus');
 
     let stream;
+    let uploadedVideoUrl;
     let analysisToken = 0;
     let stableState = 'none';
     let candidateRegion = null;
@@ -463,18 +473,25 @@
         option.textContent = device.label || 'Camera ' + (index + 1);
         return option;
       }));
-      cameraSelect.disabled = devices.length < 2;
+      cameraSelect.disabled = Boolean(uploadedVideoUrl) || devices.length < 2;
       if (activeId) cameraSelect.value = activeId;
     }
 
     async function startCamera(deviceId) {
-      analysisToken++;
+      const token = ++analysisToken;
       stream?.getTracks().forEach((track) => track.stop());
+      stream = undefined;
+      if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
+      uploadedVideoUrl = undefined;
+      video.removeAttribute('src');
+      video.controls = false;
+      videoFile.value = '';
+      useCamera.hidden = true;
       resetDetection();
       message.textContent = 'Starting camera...';
 
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const nextStream = await navigator.mediaDevices.getUserMedia({
           video: {
             ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
             width: { ideal: 640 },
@@ -483,8 +500,14 @@
           },
           audio: false,
         });
+        if (token !== analysisToken) {
+          nextStream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        stream = nextStream;
         video.srcObject = stream;
         await video.play();
+        if (token !== analysisToken) return;
 
         analysis.width = ANALYSIS_WIDTH;
         analysis.height = Math.max(1, Math.round(ANALYSIS_WIDTH * video.videoHeight / video.videoWidth));
@@ -498,9 +521,10 @@
           console.warn('White balance controls unavailable:', error);
           cameraControls.hidden = true;
         }
-        startAnalysis(analysisToken);
+        startAnalysis(token);
         await refreshCameras();
       } catch (error) {
+        if (token !== analysisToken) return;
         stream?.getTracks().forEach((track) => track.stop());
         stream = undefined;
         video.srcObject = null;
@@ -510,7 +534,45 @@
       }
     }
 
+    async function startVideoFile(file) {
+      const token = ++analysisToken;
+      stream?.getTracks().forEach((track) => track.stop());
+      stream = undefined;
+      cameraControls.hidden = true;
+      cameraSelect.disabled = true;
+      useCamera.hidden = false;
+      resetDetection();
+      message.textContent = 'Loading video...';
+
+      video.pause();
+      video.srcObject = null;
+      if (uploadedVideoUrl) URL.revokeObjectURL(uploadedVideoUrl);
+      uploadedVideoUrl = URL.createObjectURL(file);
+      video.src = uploadedVideoUrl;
+      video.controls = true;
+
+      try {
+        await video.play();
+        if (token !== analysisToken) return;
+        analysis.width = ANALYSIS_WIDTH;
+        analysis.height = Math.max(1, Math.round(ANALYSIS_WIDTH * video.videoHeight / video.videoWidth));
+        overlay.width = analysis.width;
+        overlay.height = analysis.height;
+        resolutionOutput.textContent = video.videoWidth + ' x ' + video.videoHeight;
+        message.textContent = '';
+        startAnalysis(token);
+      } catch (error) {
+        if (token !== analysisToken) return;
+        message.textContent = 'Video unavailable: ' + error.message;
+        resolutionOutput.textContent = '--';
+      }
+    }
+
     cameraSelect.addEventListener('change', () => startCamera(cameraSelect.value));
+    videoFile.addEventListener('change', () => {
+      if (videoFile.files[0]) startVideoFile(videoFile.files[0]);
+    });
+    useCamera.addEventListener('click', () => startCamera(cameraSelect.value));
     whiteBalanceMode.addEventListener('change', () => {
       updateTemperatureControl();
       applyWhiteBalance();
