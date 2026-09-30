@@ -1,28 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Traffic Light Camera</title>
+  <title>Traffic Light Detector</title>
   <link rel="stylesheet" href="../theme.css">
   <style>
     body { text-align: center; }
     main { max-width: 900px; margin: auto; padding: 0 12px 24px; }
     label { display: inline-block; margin: 0 8px 12px; }
     select { padding: 8px; font: inherit; }
+    .camera-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .camera-controls label { margin: 0; }
+    .camera-controls output { min-width: 4.5em; }
+    .camera-controls[hidden] { display: none; }
     .preview { position: relative; margin: auto; max-width: 800px; background: #111; }
     video { display: block; width: 100%; }
     .target {
       position: absolute;
-      left: 32%; top: 12%; width: 36%; height: 56%;
+      left: 32%;
+      top: 12%;
+      width: 36%;
+      height: 56%;
       border: 3px solid white;
-      box-sizing: border-box;
       box-shadow: 0 0 0 1px black;
+      pointer-events: none;
+    }
+    canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+      background: transparent;
       pointer-events: none;
     }
     .badge {
       position: absolute;
-      top: 10px; left: 10px;
+      top: 10px;
+      left: 10px;
       padding: 6px 10px;
       border-radius: 4px;
       color: white;
@@ -44,126 +67,304 @@
   </style>
 </head>
 <body>
-  <nav><a href="../"><button>Directory</button></a></nav>
+  <nav><a href="../">Directory</a></nav>
   <main>
-    <h1>Traffic Light Camera</h1>
+    <h1>Traffic Light Detector</h1>
     <label for="cameraSelect">Camera</label>
-    <select id="cameraSelect" disabled><option>Requesting camera…</option></select>
+    <select id="cameraSelect" disabled><option>Requesting camera...</option></select>
+    <div id="cameraControls" class="camera-controls" hidden>
+      <label for="whiteBalanceMode">White balance</label>
+      <select id="whiteBalanceMode"></select>
+      <label id="temperatureControl" for="colorTemperature" hidden>Temperature</label>
+      <input id="colorTemperature" type="range" hidden>
+      <output id="temperatureOutput" for="colorTemperature" hidden></output>
+      <span id="cameraControlStatus" role="status"></span>
+    </div>
 
     <div class="preview">
       <video id="camera" autoplay muted playsinline></video>
+      <canvas id="overlay" aria-hidden="true"></canvas>
       <div class="target" aria-hidden="true"></div>
       <div id="badge" class="badge">NO LIGHT</div>
     </div>
-    <p>Aim the traffic light inside the box.</p>
+    <p>Aim one traffic light inside the box. Detection runs on a downscaled frame and targets 60 FPS.</p>
 
     <div class="stats">
       <div class="stat">Detected<strong id="state" aria-live="polite">No light</strong></div>
-      <div class="stat">Since red → green<strong id="elapsed">—</strong></div>
-      <div class="stat">Preview FPS<strong id="fps">—</strong></div>
-      <div class="stat">Resolution<strong id="resolution">—</strong></div>
+      <div class="stat">Since red &rarr; green<strong id="elapsed">&mdash;</strong></div>
+      <div class="stat">Detection FPS<strong id="fps">&mdash;</strong></div>
+      <div class="stat">Camera resolution<strong id="resolution">&mdash;</strong></div>
     </div>
     <p id="message" role="status"></p>
   </main>
 
-  <canvas id="sample" width="64" height="96" hidden></canvas>
   <script>
+    const ANALYSIS_WIDTH = 320;
+    const BLOCK_SIZE = 10;
+    const TRACK_FRAMES = 5;
+    const ROI = { x: 0.32, y: 0.12, width: 0.36, height: 0.56 };
+    const COLOR_NAMES = ['', 'red', 'green'];
+    const BOX_COLORS = ['', '#ff3b30', '#32d74b'];
+    const WHITE_BALANCE_LABELS = {
+      continuous: 'Auto',
+      'single-shot': 'Lock once',
+      manual: 'Manual',
+      none: 'Off',
+    };
+
     const video = document.getElementById('camera');
+    const overlay = document.getElementById('overlay');
+    const overlayContext = overlay.getContext('2d');
+    const analysis = document.createElement('canvas');
+    const analysisContext = analysis.getContext('2d', { willReadFrequently: true });
     const cameraSelect = document.getElementById('cameraSelect');
-    const sample = document.getElementById('sample');
-    const context = sample.getContext('2d', { willReadFrequently: true });
     const stateOutput = document.getElementById('state');
     const badge = document.getElementById('badge');
     const elapsedOutput = document.getElementById('elapsed');
     const fpsOutput = document.getElementById('fps');
     const resolutionOutput = document.getElementById('resolution');
     const message = document.getElementById('message');
+    const cameraControls = document.getElementById('cameraControls');
+    const whiteBalanceMode = document.getElementById('whiteBalanceMode');
+    const temperatureControl = document.getElementById('temperatureControl');
+    const colorTemperature = document.getElementById('colorTemperature');
+    const temperatureOutput = document.getElementById('temperatureOutput');
+    const cameraControlStatus = document.getElementById('cameraControlStatus');
 
-    const MIN_LIGHT_FRACTION = 0.003;
-    const STABLE_FRAMES = 3;
     let stream;
     let analysisToken = 0;
     let stableState = 'none';
-    let candidateState = 'none';
+    let candidateRegion = null;
     let candidateFrames = 0;
+    let missedFrames = 0;
+    let displayedRegion = null;
     let redArmed = false;
+    let armedRegion = null;
     let changedAt = null;
 
-    // ponytail: color thresholds are intentionally basic; replace with a model only if real footage needs it.
-    function classifyPixels(pixels) {
-      let red = 0;
-      let green = 0;
-
-      for (let i = 0; i < pixels.length; i += 4) {
-        const r = pixels[i];
-        const g = pixels[i + 1];
-        const b = pixels[i + 2];
-        if (r > 110 && r > g * 1.35 && r > b * 1.2) red++;
-        if (g > 100 && g > r * 1.25 && g > b * 1.15) green++;
-      }
-
-      const minimum = Math.max(3, pixels.length / 4 * MIN_LIGHT_FRACTION);
-      if (red >= minimum && red > green * 1.3) return 'red';
-      if (green >= minimum && green > red * 1.3) return 'green';
-      return 'none';
+    function classifyPixel(r, g, b) {
+      if (r > 100 && r > g * 1.35 && r > b * 1.25 && g - b < (r - b) * 0.3) return 1;
+      if (g > 85 && g > r * 1.2 && g > b * 1.1) return 2;
+      return 0;
     }
 
-    function showState(nextState) {
-      if (nextState === stableState) return;
+    function findTrafficLightRegions(data, width, height) {
+      const columns = Math.ceil(width / BLOCK_SIZE);
+      const rows = Math.ceil(height / BLOCK_SIZE);
+      const cells = new Uint8Array(columns * rows);
+      const strengths = new Uint8Array(cells.length);
+      const firstColumn = Math.floor(width * ROI.x / BLOCK_SIZE);
+      const lastColumn = Math.ceil(width * (ROI.x + ROI.width) / BLOCK_SIZE);
+      const firstRow = Math.floor(height * ROI.y / BLOCK_SIZE);
+      const lastRow = Math.ceil(height * (ROI.y + ROI.height) / BLOCK_SIZE);
+
+      for (let row = firstRow; row < lastRow; row++) {
+        const top = row * BLOCK_SIZE;
+        const bottom = Math.min(top + BLOCK_SIZE, height);
+
+        for (let column = firstColumn; column < lastColumn; column++) {
+          const left = column * BLOCK_SIZE;
+          const right = Math.min(left + BLOCK_SIZE, width);
+          const counts = [0, 0, 0];
+
+          for (let y = top; y < bottom; y++) {
+            for (let x = left; x < right; x++) {
+              const index = (y * width + x) * 4;
+              counts[classifyPixel(data[index], data[index + 1], data[index + 2])]++;
+            }
+          }
+
+          const color = counts[2] > counts[1] ? 2 : 1;
+          const cell = row * columns + column;
+          const pixelCount = (right - left) * (bottom - top);
+          if (counts[color] >= Math.max(3, pixelCount * 0.03)) {
+            cells[cell] = color;
+            strengths[cell] = counts[color];
+          }
+        }
+      }
+
+      const regions = [];
+      const visited = new Uint8Array(cells.length);
+      const queue = new Int32Array(cells.length);
+
+      for (let start = 0; start < cells.length; start++) {
+        const color = cells[start];
+        if (!color || visited[start]) continue;
+
+        let head = 0;
+        let tail = 1;
+        let score = 0;
+        let minColumn = start % columns;
+        let maxColumn = minColumn;
+        let minRow = Math.floor(start / columns);
+        let maxRow = minRow;
+        queue[0] = start;
+        visited[start] = 1;
+
+        while (head < tail) {
+          const current = queue[head++];
+          const column = current % columns;
+          const row = Math.floor(current / columns);
+          score += strengths[current];
+          minColumn = Math.min(minColumn, column);
+          maxColumn = Math.max(maxColumn, column);
+          minRow = Math.min(minRow, row);
+          maxRow = Math.max(maxRow, row);
+
+          const neighbors = [current - columns, current + columns, current - 1, current + 1];
+          for (const next of neighbors) {
+            if (next < 0 || next >= cells.length || visited[next] || cells[next] !== color) continue;
+            if ((next === current - 1 || next === current + 1) && Math.floor(next / columns) !== row) continue;
+            visited[next] = 1;
+            queue[tail++] = next;
+          }
+        }
+
+        regions.push({
+          color,
+          score,
+          x: minColumn * BLOCK_SIZE,
+          y: minRow * BLOCK_SIZE,
+          width: Math.min(width, (maxColumn + 1) * BLOCK_SIZE) - minColumn * BLOCK_SIZE,
+          height: Math.min(height, (maxRow + 1) * BLOCK_SIZE) - minRow * BLOCK_SIZE,
+        });
+      }
+
+      return regions;
+    }
+
+    function drawRegions(regions) {
+      overlayContext.clearRect(0, 0, overlay.width, overlay.height);
+      overlayContext.font = 'bold 12px Arial';
+      overlayContext.lineWidth = 2;
+
+      for (const region of regions) {
+        const color = BOX_COLORS[region.color];
+        const label = COLOR_NAMES[region.color].toUpperCase();
+        overlayContext.strokeStyle = color;
+        overlayContext.fillStyle = color + '33';
+        overlayContext.strokeRect(region.x, region.y, region.width, region.height);
+        overlayContext.fillRect(region.x, region.y, region.width, region.height);
+        overlayContext.fillStyle = color;
+        overlayContext.fillRect(region.x, Math.max(0, region.y - 17), overlayContext.measureText(label).width + 8, 17);
+        overlayContext.fillStyle = '#111';
+        overlayContext.fillText(label, region.x + 4, Math.max(12, region.y - 4));
+      }
+    }
+
+    function strongestRegion(regions) {
+      let strongest = null;
+      for (const region of regions) {
+        if (!strongest || region.score > strongest.score) strongest = region;
+      }
+      return strongest;
+    }
+
+    function isNear(first, second) {
+      if (!first || !second) return false;
+      const dx = first.x + first.width / 2 - second.x - second.width / 2;
+      const dy = first.y + first.height / 2 - second.y - second.height / 2;
+      const regionSize = Math.max(first.width, first.height, second.width, second.height);
+      const tolerance = Math.max(BLOCK_SIZE * 2, Math.min(BLOCK_SIZE * 4, regionSize));
+      return dx * dx + dy * dy <= tolerance * tolerance;
+    }
+
+    function isSameTrack(first, second) {
+      return first?.color === second?.color && isNear(first, second);
+    }
+
+    function shouldStartTimer(isArmed, nextState, redRegion, nextRegion) {
+      return isArmed && nextState === 'green' && isNear(redRegion, nextRegion);
+    }
+
+    function showState(nextState, now, region) {
+      if (nextState === stableState) {
+        if (nextState === 'red') armedRegion = region;
+        return;
+      }
       stableState = nextState;
 
-      if (nextState === 'red') redArmed = true;
-      if (nextState === 'green' && redArmed) {
-        changedAt = performance.now();
+      if (nextState === 'red') {
+        redArmed = true;
+        armedRegion = region;
+      }
+      if (shouldStartTimer(redArmed, nextState, armedRegion, region)) {
+        changedAt = now;
         redArmed = false;
+        armedRegion = null;
       }
 
       const labels = { none: 'No light', red: 'Red light', green: 'Green light' };
       stateOutput.textContent = labels[nextState];
       badge.textContent = labels[nextState].toUpperCase();
-      badge.className = `badge ${nextState === 'none' ? '' : nextState}`;
+      badge.className = 'badge' + (nextState === 'none' ? '' : ' ' + nextState);
+    }
+
+    function observeRegion(nextRegion, now) {
+      if (!nextRegion) {
+        candidateRegion = null;
+        candidateFrames = 0;
+      } else if (isSameTrack(candidateRegion, nextRegion)) {
+        candidateRegion = nextRegion;
+        candidateFrames++;
+      } else {
+        candidateRegion = nextRegion;
+        candidateFrames = 1;
+      }
+
+      if (candidateFrames >= TRACK_FRAMES) {
+        displayedRegion = candidateRegion;
+        missedFrames = 0;
+        showState(COLOR_NAMES[candidateRegion.color], now, candidateRegion);
+      } else if (nextRegion && isNear(displayedRegion, nextRegion)) {
+        missedFrames = 0;
+      } else {
+        missedFrames++;
+        if (missedFrames >= TRACK_FRAMES) {
+          displayedRegion = null;
+          showState('none', now, null);
+        }
+      }
+
+      return displayedRegion;
     }
 
     function resetDetection() {
       stableState = 'reset';
-      candidateState = 'none';
+      candidateRegion = null;
       candidateFrames = 0;
+      missedFrames = 0;
+      displayedRegion = null;
       redArmed = false;
+      armedRegion = null;
       changedAt = null;
-      showState('none');
-      elapsedOutput.textContent = '—';
-      fpsOutput.textContent = '—';
+      showState('none', performance.now(), null);
+      elapsedOutput.textContent = '--';
+      fpsOutput.textContent = '--';
+      overlayContext.clearRect(0, 0, overlay.width, overlay.height);
     }
 
-    function inspectFrame() {
-      const width = video.videoWidth;
-      const height = video.videoHeight;
-      if (!width || !height) return;
-
-      context.drawImage(video, width * 0.32, height * 0.12, width * 0.36, height * 0.56,
-        0, 0, sample.width, sample.height);
-      const next = classifyPixels(context.getImageData(0, 0, sample.width, sample.height).data);
-
-      if (next === candidateState) candidateFrames++;
-      else {
-        candidateState = next;
-        candidateFrames = 1;
-      }
-      if (candidateFrames >= STABLE_FRAMES) showState(next);
+    function inspectFrame(now) {
+      analysisContext.drawImage(video, 0, 0, analysis.width, analysis.height);
+      const pixels = analysisContext.getImageData(0, 0, analysis.width, analysis.height).data;
+      const regions = findTrafficLightRegions(pixels, analysis.width, analysis.height);
+      const trackedRegion = observeRegion(strongestRegion(regions), now);
+      drawRegions(trackedRegion ? [trackedRegion] : []);
     }
 
     function startAnalysis(token) {
       let frames = 0;
       let fpsStartedAt = performance.now();
       let lastMediaTime = -1;
+      const usesVideoFrameCallback = 'requestVideoFrameCallback' in video;
 
-      function frame(now, metadata) {
+      function frame(now) {
         if (token !== analysisToken) return;
-        const mediaTime = metadata?.mediaTime ?? video.currentTime;
-        if (mediaTime !== lastMediaTime) {
-          lastMediaTime = mediaTime;
+        if (usesVideoFrameCallback || video.currentTime !== lastMediaTime) {
+          lastMediaTime = video.currentTime;
           frames++;
-          inspectFrame();
+          inspectFrame(now);
         }
 
         if (now - fpsStartedAt >= 1000) {
@@ -172,23 +373,94 @@
           fpsStartedAt = now;
         }
 
-        if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(frame);
+        if (usesVideoFrameCallback) video.requestVideoFrameCallback(frame);
         else requestAnimationFrame(frame);
       }
 
-      if ('requestVideoFrameCallback' in video) video.requestVideoFrameCallback(frame);
+      if (usesVideoFrameCallback) video.requestVideoFrameCallback(frame);
       else requestAnimationFrame(frame);
+    }
+
+    function updateTemperatureControl() {
+      const available = whiteBalanceMode.value === 'manual' && colorTemperature.max !== '';
+      temperatureControl.hidden = !available;
+      colorTemperature.hidden = !available;
+      temperatureOutput.hidden = !available;
+      if (available) temperatureOutput.value = Math.round(Number(colorTemperature.value)) + ' K';
+    }
+
+    function configureWhiteBalanceControls(track) {
+      cameraControls.hidden = true;
+      cameraControlStatus.textContent = '';
+      colorTemperature.removeAttribute('min');
+      colorTemperature.removeAttribute('max');
+      colorTemperature.removeAttribute('step');
+
+      if (!track.getCapabilities) return;
+      const capabilities = track.getCapabilities();
+      const modes = (capabilities.whiteBalanceMode || [])
+        .filter((mode) => WHITE_BALANCE_LABELS[mode]);
+      if (!modes.some((mode) => mode !== 'continuous')) return;
+
+      whiteBalanceMode.replaceChildren(...modes.map((mode) => {
+        const option = document.createElement('option');
+        option.value = mode;
+        option.textContent = WHITE_BALANCE_LABELS[mode];
+        return option;
+      }));
+
+      const settings = track.getSettings();
+      whiteBalanceMode.value = modes.includes(settings.whiteBalanceMode)
+        ? settings.whiteBalanceMode
+        : modes[0];
+
+      if (capabilities.colorTemperature) {
+        const temperature = capabilities.colorTemperature;
+        colorTemperature.min = temperature.min;
+        colorTemperature.max = temperature.max;
+        colorTemperature.step = temperature.step || 1;
+        colorTemperature.value = Number.isFinite(settings.colorTemperature)
+          ? settings.colorTemperature
+          : (temperature.min + temperature.max) / 2;
+      }
+
+      updateTemperatureControl();
+      cameraControls.hidden = false;
+    }
+
+    async function applyWhiteBalance() {
+      const track = stream?.getVideoTracks()[0];
+      if (!track) return;
+
+      const mode = whiteBalanceMode.value;
+      const constraints = { whiteBalanceMode: mode };
+      if (mode === 'manual' && colorTemperature.max !== '') {
+        constraints.colorTemperature = Number(colorTemperature.value);
+      }
+
+      cameraControlStatus.textContent = 'Applying...';
+      try {
+        await track.applyConstraints({
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 60, max: 60 },
+          ...constraints,
+        });
+        cameraControlStatus.textContent = WHITE_BALANCE_LABELS[mode] + ' active';
+      } catch (error) {
+        cameraControlStatus.textContent = 'Unavailable: ' + error.message;
+      }
     }
 
     async function refreshCameras() {
       const devices = (await navigator.mediaDevices.enumerateDevices())
-        .filter(device => device.kind === 'videoinput');
+        .filter((device) => device.kind === 'videoinput');
       const activeId = stream?.getVideoTracks()[0]?.getSettings().deviceId;
 
       cameraSelect.replaceChildren(...devices.map((device, index) => {
         const option = document.createElement('option');
         option.value = device.deviceId;
-        option.textContent = device.label || `Camera ${index + 1}`;
+        option.textContent = device.label || 'Camera ' + (index + 1);
         return option;
       }));
       cameraSelect.disabled = devices.length < 2;
@@ -197,43 +469,72 @@
 
     async function startCamera(deviceId) {
       analysisToken++;
-      stream?.getTracks().forEach(track => track.stop());
+      stream?.getTracks().forEach((track) => track.stop());
       resetDetection();
-      message.textContent = 'Starting camera…';
+      message.textContent = 'Starting camera...';
 
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30 }
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 60, max: 60 },
           },
-          audio: false
+          audio: false,
         });
         video.srcObject = stream;
         await video.play();
-        resolutionOutput.textContent = `${video.videoWidth} × ${video.videoHeight}`;
+
+        analysis.width = ANALYSIS_WIDTH;
+        analysis.height = Math.max(1, Math.round(ANALYSIS_WIDTH * video.videoHeight / video.videoWidth));
+        overlay.width = analysis.width;
+        overlay.height = analysis.height;
+        resolutionOutput.textContent = video.videoWidth + ' x ' + video.videoHeight;
         message.textContent = '';
+        try {
+          configureWhiteBalanceControls(stream.getVideoTracks()[0]);
+        } catch (error) {
+          console.warn('White balance controls unavailable:', error);
+          cameraControls.hidden = true;
+        }
         startAnalysis(analysisToken);
         await refreshCameras();
       } catch (error) {
-        message.textContent = `Camera unavailable: ${error.message}`;
-        resolutionOutput.textContent = '—';
+        stream?.getTracks().forEach((track) => track.stop());
+        stream = undefined;
+        video.srcObject = null;
+        message.textContent = 'Camera unavailable: ' + error.message;
+        resolutionOutput.textContent = '--';
         cameraSelect.disabled = true;
       }
     }
 
     cameraSelect.addEventListener('change', () => startCamera(cameraSelect.value));
+    whiteBalanceMode.addEventListener('change', () => {
+      updateTemperatureControl();
+      applyWhiteBalance();
+    });
+    colorTemperature.addEventListener('input', updateTemperatureControl);
+    colorTemperature.addEventListener('change', applyWhiteBalance);
     navigator.mediaDevices?.addEventListener('devicechange', refreshCameras);
+
     setInterval(() => {
       elapsedOutput.textContent = changedAt === null
-        ? '—'
-        : `${((performance.now() - changedAt) / 1000).toFixed(2)} s`;
+        ? '--'
+        : ((performance.now() - changedAt) / 1000).toFixed(2) + ' s';
     }, 50);
 
-    const redCheck = new Uint8ClampedArray(Array(4).fill([255, 0, 0, 255]).flat());
-    console.assert(classifyPixels(redCheck) === 'red', 'Traffic light classifier self-check failed');
+    console.assert(classifyPixel(255, 20, 20) === 1, 'Red classifier self-check failed');
+    console.assert(classifyPixel(20, 220, 40) === 2, 'Green classifier self-check failed');
+    console.assert(classifyPixel(230, 190, 20) === 0, 'Yellow rejection self-check failed');
+    console.assert(classifyPixel(255, 130, 10) === 0, 'Amber rejection self-check failed');
+    const redRegionCheck = { color: 1, x: 100, y: 40, width: 20, height: 20 };
+    const greenRegionCheck = { color: 2, x: 105, y: 45, width: 20, height: 20 };
+    const farGreenRegionCheck = { color: 2, x: 200, y: 100, width: 20, height: 20 };
+    console.assert(shouldStartTimer(true, 'green', redRegionCheck, greenRegionCheck), 'Red to green timer self-check failed');
+    console.assert(!shouldStartTimer(false, 'green', redRegionCheck, greenRegionCheck), 'Timer arm self-check failed');
+    console.assert(!shouldStartTimer(true, 'green', redRegionCheck, farGreenRegionCheck), 'Timer location self-check failed');
 
     if (!navigator.mediaDevices?.getUserMedia) {
       message.textContent = 'Camera access is not supported in this browser.';
